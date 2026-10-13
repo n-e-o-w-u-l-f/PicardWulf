@@ -1,0 +1,40 @@
+# LAST_TASKS — PicardWulf
+
+Updated: 2026-10-14 · Project: `n-e-o-w-u-l-f/PicardWulf`
+
+## Source of truth
+
+- GitHub repository: https://github.com/n-e-o-w-u-l-f/PicardWulf
+- Branch: `main`
+- First complete source publication: `11277cb221affaaead8afc009f1bd5bab8c109f8`
+- Persistent local checkout on Legion: `/home/andreas/projects/PicardWulf`, owner `andreas`; the remote and local HEAD were equal after publication.
+- Local GitHub auth path: existing authorized `andreas` GitHub CLI on Legion; no new paid CI or OAuth credentials created. Avoid unrelated repositories.
+
+## Implemented source
+
+- Picard 3.0 plugin API and user plugin directory, without the broken frozen `picard-cli.exe`.
+- Multi-source adapters: MusicBrainz, Deezer, Apple/iTunes catalogue; optional authenticated Spotify, SoundCloud, Last.fm.
+- Automatic file-load and metadata-update background search, SQLite persistent queue/cache, per-source quota and candidate scoring.
+- Picard native release/recording association only for authentic MusicBrainz IDs.
+- Consent-gated tag changes with diff preview and hash-checked full audio backup.
+- NEOWULF script repair; distinguish compilations from Various Artists; Eminem *Curtain Call 2* must remain Eminem.
+- Install/upgrade v2/v3 with rollback safeguards and documented profile compatibility assumptions.
+
+## Validation
+
+- **PASS**: 90 Python unit/contract tests on Legion using self-contained packaged sources (`python3 -m unittest discover -s tests -q`), 2026-10-14.
+- **PASS**: `git diff --check` before push; GitHub code, README and file tree read back; fast-forward push succeeded.
+- **PENDING**: actual installer/plugin activation on Windows BMAX-B6 as `megal`; the release is a candidate, not a production-verified binary.
+- **PENDING**: live credentials/API responses, rate limits and terms for individual providers.
+- **PENDING**: interactive Picard 3 native release selection, asynchronous tag saving, file moves/renames, recovery from backup on actual media.
+- **PENDING**: automated multi-source candidate selection integrated deeper into native Picard release suggestion UX; current source uses explicit candidate review and authentic MBIDs.
+
+## Next safe actions
+
+1. Run fresh `git pull --ff-only` before editing, inspect `README.md`, `CHANGELOG.md` and failing runtime gates. Preserve unrelated changes.
+2. On BMAX-B6 under interactive `megal`, install and enable via `Install-NEOWULF.cmd` (not the unsigned PS1 directly); verify actual plugin log. Do not treat file copy as activation.
+3. Use a disposable copy of a small audio sample before tag write. Confirm source backup SHA-256 and resulting tags after asynchronous Picard save; verify naming profile overrides.
+4. Validate allowed provider endpoints with legitimate API credentials; do not use scraping bypasses or paid services.
+5. Track discovered defects with reproducible failure fingerprints, minimal fixes, tests, and Git commits. Avoid provider-denied remote credential approaches.
+
+DoD: all requested providers demonstrably functional where legitimate access is available, cross-source matching accurate, files associated to the correct native Picard releases, tags safely persisted/rollback tested, and BMAX runtime acceptance evidenced.
