@@ -57,6 +57,7 @@ def edition_value(candidate,key):
 def edition_conflicts(a,b):
     conflicts=[]
     for key in EDITION_FIELDS:
+        if key=='albumartist' and (not a.get(key) or not b.get(key)):continue
         left,right=edition_value(a,key),edition_value(b,key)
         if not left or not right:continue
         if key=='release_date':
@@ -100,6 +101,8 @@ def _valid_identifiers(q, candidate):
 def source_neutral_score(q, candidate):
     """0–1 fit: no MusicBrainz preference or non-comparable provider trust boost."""
     if not candidate.get('source') or not candidate.get('artist') or not candidate.get('title'):
+        return 0.0
+    if candidate.get('enrichment_status') in ('CONFLICT','ALBUM_CONFLICT'):
         return 0.0
     if norm(candidate.get('artist')) in EXTERNAL_PROVIDER_NAMES:
         return 0.0
@@ -204,6 +207,8 @@ def _decide_auto(q, rows, status=None):
         return {'state':'review','reason':'album context missing; recording is not release identity'}
     if winner['release_score'] < AUTO_THRESHOLD:
         return {'state':'review','reason':'matching points below auto threshold'}
+    if norm(winner.get('albumartist'))=='various artists' and not q.get('albumartist'):
+        return {'state':'review','reason':'album artist evidence missing for compilation'}
     if not winner.get('album'):
         return {'state':'review','reason':'candidate does not identify an album'}
     for key in EDITION_FIELDS:

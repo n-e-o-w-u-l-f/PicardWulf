@@ -80,7 +80,7 @@ def album_cache_key(q):
     import unicodedata
     def normalize(v):return ' '.join(unicodedata.normalize('NFKC',str(v or '')).casefold().split())
     if not q.get('album'):return None
-    return hashlib.sha256(('album-pool-v1|'+normalize(q.get('artist'))+'|'+normalize(q['album'])).encode()).hexdigest()
+    return hashlib.sha256(('album-pool-v1-enriched-20261014|'+normalize(q.get('artist'))+'|'+normalize(q['album'])).encode()).hexdigest()
 
 
 class PolicyClient:
@@ -91,7 +91,8 @@ class PolicyClient:
         self._auth_tickets={}
 
     def _reserve(self,source):
-        bucket='musicbrainz' if source=='musicbrainz_lookup' else source
+        bucket=('musicbrainz' if source=='musicbrainz_lookup' else
+                'deezer' if source in ('deezer_track','deezer_album') else source)
         provider=bucket.removesuffix('_auth')
         delay=self.delays.get(bucket,self.delays.get(provider,1.))
         budget=4 if source=='soundcloud_auth' else int(self.options.get('requests_per_hour',3000))
@@ -120,7 +121,8 @@ class PolicyClient:
         return ticket
 
     def request(self,source,*args,**kwargs):
-        bucket='musicbrainz' if source=='musicbrainz_lookup' else source
+        bucket=('musicbrainz' if source=='musicbrainz_lookup' else
+                'deezer' if source in ('deezer_track','deezer_album') else source)
         provider=bucket.removesuffix('_auth')
         ticket=kwargs.pop('_reservation',None)
         reserved=ticket is not None and ticket is self._auth_tickets.get(source)

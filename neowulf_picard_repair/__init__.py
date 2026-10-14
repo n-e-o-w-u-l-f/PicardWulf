@@ -169,7 +169,7 @@ def _file_snapshot(file):
     if get is None:return None
     keys=('title','artist','album','albumartist','isrc','musicbrainz_recordingid',
           'musicbrainz_albumid','length','~length','date','releasecountry','barcode',
-          'releasecomment','tracknumber','totaltracks','discnumber','totaldiscs',
+          'releasecomment','tracknumber','totaltracks','discnumber','totaldiscs','genre','label','composer','originaldate',
           '~picardwulf_source','~picardwulf_decision','~picardwulf_review')
     data={k:get(k,'') for k in keys}
     if not data['title'] and not data['artist']:
@@ -254,7 +254,7 @@ class SourceStatus(BaseAction):
         _show('NEOWULF Universal Metadata',
             (lines or 'Anbietersteuerung wird im Hintergrund initialisiert.')+'\n\n'
             f'Geplant: {st["queued"]} · Eingangs-Puffer: {st["staging"]} · Ausstehend: {st["backlog"]} · In Arbeit: {st["pending"]} · Fehlgeschlagen: {st["failed"]} · Pause: {st["paused"]}\n'
-            f'Großer Rückstand beim Start: {st["auto_paused_backlog"]}\n\n'
+            f'Großer Rückstand erkannt: {st["large_backlog_detected"]} (Warnung, keine automatische Pause)\n\n'
             f'Bestätigt verarbeitet: {st["committed"]} · Wiederholen: {st["retry"]}\n'
             f'Rückstau: {st["backpressure"]} · Datenbankfehler: {st["db_error"] or "keiner"}\n'
             'Eingangs-Puffer ist noch NICHT dauerhaft; Überlauf wartet in Picard.\n'

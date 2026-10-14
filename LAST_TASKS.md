@@ -61,6 +61,16 @@ Updated: 2026-10-14 · Project: `n-e-o-w-u-l-f/PicardWulf`
 - 119 existing tests and target-version regression are baseline; **BMAX 29k+10k runtime acceptance still OPEN**.
 - Research made no BMAX process changes, no media modifications, no paid API purchases, no user-secret uploads.
 
+## Full metadata & provider registration checkpoint — 2026-10-14
+
+- Target stays v1.0. Read-only Legion public probes: MusicBrainz, Deezer, Apple all AVAILABLE. A real matched Deezer track+album showed all available core fields; API responses and account rights from BMAX remain unverified.
+- Full official-detail Deezer enrichment now shares Deezer rate/quota bucket; complete candidate fields map to Picard in-memory tags, with MBID, albumartist, release and manual-edit protection. 158 local mocks/regressions passed (before final documentation validation).
+- Previous unrequested >2,000-backlog pause is now a warning only; persisted explicit pause is still honored. New cache keys prevent replay of old incomplete candidate data.
+- BMAX reached by Tailscale but SSH key login to the tested local accounts was denied. No Picard termination, no BMAX data changes.
+- New SoundCloud client credentials currently require Artist Pro; Spotify Development requires Premium. Last.fm requires personal app registration. No extra cost authorized, no keys invented. All account-dependent runtime gates OPEN.
+- Registration instructions, source-backed eligibility and operational acceptance: [provider guide](docs/planning/V1.0-PROVIDER-ACCESS.md).
+- NEXT: verified BMAX user-session plugin activation, provider status and legitimate credentials; no stable release label before actual save/restore and 29k+10k UI tests.
+
 ## Next safe actions
 
 ### S1 source checkpoint — 2026-10-14
@@ -88,7 +98,7 @@ The earlier validation/incident sections above are historical checkpoints; this 
 - Starting clean HEAD `562618ba12625ffefd525837e63955b40d79a4a9` verified against GitHub. Target remains **v1.0**; no release, deployment, Picard restart, original audio change or paid service.
 - Implemented production edition snapshots, recording/release identifier separation, release-v2 context cache, matching-point weight/contribution reports, full alternatives, missing-evidence abstention, verified sibling-recording consensus and fixed-preview conflict review.
 - **PASS:** curated synthetic 41-case corpus: 10 correct proposals, 31 abstentions, zero wrong automatic assignments or provider-artist corruption. Independent review's Critical snapshot and Important conflict/consensus issues fixed with RED→GREEN regressions. [S3 evidence and review ledger](docs/planning/S3-EXECUTION-2026-10-14.md).
-- Windows suite: 161 tests run, one platform skip, remainder PASS. Legion final suite/readback recorded in S3 evidence. Real Qt 39k load: bound 2,048, p95 6.67 ms / p99 15.41 ms, zero GUI SQLite/media operations; backup/refresh/operator probes PASS. These are synthetic Legion measurements, not BMAX evidence.
+- Combined Legion suite: 176 tests PASS; Windows: 176 run, 175 PASS, 1 platform skip. Publication readback recorded with S3 completion. Concurrent main `cb01721` fully preserved. Real Qt 39k load: bound 2,048, p95 5.81 ms / p99 19.09 ms, zero GUI SQLite/media operations; backup/refresh/operator probes PASS. These are synthetic Legion measurements, not BMAX evidence.
 - **OPEN:** BMAX runtime/S0, S4 media-write/recovery and S5 release gate. Unverified cross-script aliases and missing full tracklists abstain; native matching-window percentage wording is a deferred minor. Existing source and original music were preserved; Deep Research was not repeated.
 - Next safe work: finish remaining S3 evidence limitations where legitimate catalogue data is available, then S4→S5 in order. Never interpret these source results as stable v1.0 acceptance.
 

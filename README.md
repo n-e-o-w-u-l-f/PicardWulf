@@ -152,6 +152,14 @@ The v1.0 S1 scheduler admits at most **2,048 uncommitted envelopes**, including 
 
 **Status:** Tested on Legion with 10,000 synthetic jobs; real BMAX process health and in-Picard hot-reload remain unverified, and the fix cannot modify code already imported by a running plugin until Picard's plugin manager reloads it.
 
+## Full metadata and provider access (v1.0)
+
+Read-only public catalog tests on Legion confirmed MusicBrainz, Deezer and Apple/iTunes searches. A matching Deezer track/album returned ISRC, disc/track numbers, date, label, barcode and album artist. The rating is bidirectional: Deezer beats MusicBrainz only with stronger evidence, and vice versa.
+
+Provider access is not automatically acquired: SoundCloud new app registration requires Artist Pro; Spotify development apps require Premium; Last.fm issues keys through its own developer account. No paid sign-up or fake key is used. Existing eligible secrets can be entered locally via **Tools > NEOWULF > Quellen-Zugangsdaten (Windows DPAPI)**. Source status and stored manual pause are exposed in Picard; a large backlog no longer forces a permanent pause. This code is **not deployed in the running BMAX process** without a plugin reload.
+
+See [API access and safe Windows rollout](docs/planning/V1.0-PROVIDER-ACCESS.md).
+
 ## v1.0 architecture review and next implementation step
 
 The sole target version remains **PicardWulf v1.0**. A source-backed stability assessment has identified remaining risks in GUI/SQLite operations, staging durability, provider quotas, uncalibrated release confidence and asynchronous media writes. The next step is **S1: bounded durable scheduling and completely non-blocking GUI integration**. No claim of Windows runtime remediation is made from this research alone.

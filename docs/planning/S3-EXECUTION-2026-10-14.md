@@ -50,3 +50,15 @@ Existing documented response fields checked against [Spotify search reference](h
 - Final Windows suite: **161 run, 160 PASS, 1 platform skip**, 25.459 seconds. The corrected durable-drain assertion waits for persisted results rather than treating queued-count zero as completion.
 - Post-fix real Qt backup/generation, manual refresh and provider/credential probes PASS; the full 39k load metrics above were collected in this S3 run.
 - Publication is a source-only fast-forward commit to `main`. Check GitHub HEAD, LAST_TASKS, this evidence file and ranking/corpus blob IDs against the committed tree, and fast-forward the clean canonical Legion checkout. Exact commit/readback is reported in the task completion response; do not deploy or tag from this source checkpoint.
+
+## Concurrent main integration and final combined verification
+
+Before push, main advanced to `cb01721d888f0240656eaf08b20151e9996b6d01` (Deezer official-detail enrichment and background-search policy). Preserved the complete concurrent commit and merged it into S3; no overwrite or forced push. Resolved adapter/engine/test overlaps by keeping enriched metadata and numeric bounds, new edition fields, idempotent snapshots and context cache keys. Production snapshots also retain optional genre/label/composer/originaldate for the concurrent preservation policy.
+
+The concurrent explicitly confirmed manual proposal may omit an unknown VA album credit; automatic selection must abstain without that credit. `test_missing_album_credit_cannot_auto_choose_va_edition` reproduced ready→review RED→GREEN. Original/VA compilation safeguards and both providers' higher-score winners remain covered.
+
+**Combined Legion: 176/176 PASS**, 4.990 seconds; compilation/diff checks PASS. Combined Windows validation is performed from the exact merged source rather than the earlier checkout. Combined real Qt 39k identities: staging 2,048, extra peak 58.08 MiB, GUI lag p95 5.81 ms / p99 19.09 ms / max 51.42 ms, elapsed 71.14 s, GUI SQLite calls 0. Six backup cases, GUI media operations 0, and refresh generation fencing PASS. These combined results supersede the earlier source-only measurements above.
+
+The S3 development commit is `28b2c69`; the publication merge also preserves the concurrent main parent. Target remains v1.0, BMAX/runtime/media gates OPEN.
+
+**Final exact merged Windows source: 176 tests run, 175 PASS, 1 platform skip**, 19.166 seconds. Post-integration native refresh and provider/credential real Qt probes also PASS.

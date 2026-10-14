@@ -119,4 +119,9 @@ class ReleaseCorpus(unittest.TestCase):
         duplicates=[{**s,'isrc':a['isrc']} for s in siblings]
         self.assertEqual(agg.aggregate(q,{'deezer':[a,b]},album_evidence=duplicates)['auto']['state'],'ambiguous')
 
+    def test_missing_album_credit_cannot_auto_choose_va_edition(self):
+        q={**Q,'albumartist':''}
+        candidate={**entry('itunes'),'albumartist':'Various Artists'}
+        self.assertNotEqual(agg.aggregate(q,{'itunes':[candidate]})['auto']['state'],'ready')
+
 if __name__=='__main__':unittest.main()

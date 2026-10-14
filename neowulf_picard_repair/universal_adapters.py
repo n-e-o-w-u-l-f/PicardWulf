@@ -40,18 +40,40 @@ def credit(value):
     return one(value)
 
 
-def item(source, title, artist, album='', duration=0, isrc='', mbid='', url='', albumartist='', release_mbid='', provider_album_id='', release_url='', release_date='', country='', barcode='', edition='', tracknumber='', discnumber='', totaltracks='', totaldiscs=''):
+def _number(value, maximum=999):
+    if isinstance(value, bool):return ''
+    try:
+        number=int(value)
+        return str(number) if 0 < number <= maximum else ''
+    except (TypeError, ValueError, OverflowError):return ''
+
+
+def _genre(value):
+    # A text-only genre from a provider response, never artwork or HTML.
+    if isinstance(value, dict):
+        value=value.get('name','')
+    if isinstance(value, list):
+        value=next((v for v in value if v), '')
+    return one(value)[:120]
+
+
+def item(source, title, artist, album='', duration=0, isrc='', mbid='', url='', albumartist='', release_mbid='', provider_album_id='', release_url='', release_date='', *,
+         tracknumber='', discnumber='', totaltracks='', totaldiscs='', genre='', label='', barcode='', composer='', originaldate='', country='', edition=''):
     try: duration = max(0, min(10_000_000, int(float(duration or 0))))
     except (TypeError, ValueError, OverflowError): duration = 0
+    # Keep credits and release fields separate. Never manufacture missing
+    # provider fields, or treat the source's brand as an artist.
     return {'source': source, 'title': one(title)[:300], 'artist': one(artist)[:300],
             'album': one(album)[:300], 'albumartist': one(albumartist)[:300],
             'duration_ms': duration, 'isrc': one(isrc).upper()[:14],
             'recording_mbid': one(mbid)[:40], 'release_mbid': one(release_mbid)[:40], 'url': one(url)[:800],
             'provider_album_id':one(provider_album_id)[:110],
             'release_url':one(release_url)[:800], 'release_date':one(release_date)[:40],
-            'country':one(country)[:40], 'barcode':one(barcode)[:40], 'edition':one(edition)[:80],
-            'tracknumber':one(tracknumber)[:12], 'discnumber':one(discnumber)[:12],
-            'totaltracks':one(totaltracks)[:12], 'totaldiscs':one(totaldiscs)[:12]}
+            'tracknumber':_number(tracknumber), 'discnumber':_number(discnumber),
+            'totaltracks':_number(totaltracks,9999), 'totaldiscs':_number(totaldiscs),
+            'genre':_genre(genre), 'label':one(label)[:180],
+            'barcode':one(barcode)[:32], 'composer':one(composer)[:180],
+            'originaldate':one(originaldate)[:40], 'country':one(country)[:40], 'edition':one(edition)[:80]}
 
 
 def musicbrainz(q, request, credentials):
@@ -113,18 +135,87 @@ def musicbrainz(q, request, credentials):
     return found[:18]
 
 
+def _deezer_details(candidate, raw, q, request):
+    """Resolve one strongly matching Deezer track and album from official API.
+
+    Enrich with ISRC, album artist, real positions and label rather than
+    assuming that /search already contains a complete album/recording.
+    """
+    def valid_id(v):
+        return str(v) if isinstance(v,int) and not isinstance(v,bool) and 0 < v <= 10**16-1 else ''
+    rid=valid_id(raw.get('id'))
+    album_id=valid_id((raw.get('album') or {}).get('id')) if isinstance(raw.get('album'),dict) else ''
+    if not rid:return
+    detail=request('deezer_track',f'https://api.deezer.com/track/{rid}',{})
+    if not isinstance(detail,dict) or not isinstance(detail.get('artist'),dict):
+        raise ValueError('Deezer track detail schema invalid')
+    if (SequenceMatcher(None,one(q.get('title')).casefold(),one(detail.get('title')).casefold()).ratio()<.9
+        or SequenceMatcher(None,one(q.get('artist')).casefold(),
+                           one(detail['artist'].get('name')).casefold()).ratio()<.9):
+        candidate['enrichment_status']='CONFLICT'
+        return
+    fields={'isrc':one(detail.get('isrc')).upper()[:14],
+            'tracknumber':_number(detail.get('track_position')),
+            'discnumber':_number(detail.get('disk_number')),
+            'release_date':one(detail.get('release_date'))[:40]}
+    for field,value in fields.items():
+        if value:candidate[field]=value
+    actual_album=detail.get('album') or {}
+    if isinstance(actual_album,dict):
+        new_album=one(actual_album.get('title'))
+        new_id=valid_id(actual_album.get('id'))
+        if new_album and (not candidate['album'] or new_album.casefold()==candidate['album'].casefold()):
+            candidate['album']=new_album[:300]
+            if new_id:album_id=new_id
+    if album_id:
+        album=request('deezer_album',f'https://api.deezer.com/album/{album_id}',{})
+        if not isinstance(album,dict) or not isinstance(album.get('title'),str):
+            raise ValueError('Deezer album detail schema invalid')
+        if candidate['album'] and SequenceMatcher(None,candidate['album'].casefold(),album['title'].casefold()).ratio()<.86:
+            candidate['enrichment_status']='ALBUM_CONFLICT'
+            return
+        for field,source in (('release_date','release_date'),('barcode','upc'),
+                             ('totaltracks','nb_tracks'),('label','label')):
+            raw_value=album.get(source)
+            value=_number(raw_value,9999) if field=='totaltracks' else one(raw_value)
+            if value:candidate[field]=value[:180]
+        candidate['provider_album_id']=album_id
+        creator=album.get('artist')
+        if isinstance(creator,dict):
+            credit_name=one(creator.get('name'))
+            if credit_name and credit_name.casefold() not in ('deezer','spotify','apple music'):
+                candidate['albumartist']=credit_name[:300]
+    candidate['enrichment_status']='COMPLETE'
+
+
 def deezer(q, request, credentials):
-    payload = request('deezer','https://api.deezer.com/search',
-                      {'q': f'{q["artist"]} {q["title"]}', 'limit': 6})
+    payload=request('deezer','https://api.deezer.com/search',
+                    {'q': f'{q["artist"]} {q["title"]}', 'limit': 6})
     def duration(e):
         try:return 1000*max(0,min(10000,float(e.get('duration') or 0)))
         except (TypeError,ValueError,OverflowError):return 0
-    return [item('deezer', e.get('title'), (e.get('artist') or {}).get('name'),
+    raw_rows=rows(payload,'data')
+    found=[item('deezer', e.get('title'), (e.get('artist') or {}).get('name'),
                  (e.get('album') or {}).get('title'), duration(e),
-                 e.get('isrc'), url=e.get('link', ''),
+                 e.get('isrc'),url=e.get('link',''),
                  provider_album_id=(e.get('album') or {}).get('id',''),
-                 release_url=(e.get('album') or {}).get('tracklist',''))
-            for e in rows(payload,'data')]
+                 release_url=(e.get('album') or {}).get('tracklist',''),
+                 release_date=(e.get('album') or {}).get('release_date',''),
+                 tracknumber=e.get('track_position'),discnumber=e.get('disk_number'),
+                 totaltracks=(e.get('album') or {}).get('nb_tracks',''),
+                 genre=(e.get('album') or {}).get('genre',''),
+                 label=(e.get('album') or {}).get('label',''))
+           for e in raw_rows]
+    # Maximum one extra track and album lookup per six-result search.
+    for candidate,raw in zip(found,raw_rows):
+        if (isinstance(raw.get('id'),int)
+            and SequenceMatcher(None,one(q.get('title')).casefold(),candidate['title'].casefold()).ratio()>=.92
+            and SequenceMatcher(None,one(q.get('artist')).casefold(),candidate['artist'].casefold()).ratio()>=.92
+            and (not q.get('album') or not candidate.get('album')
+                 or SequenceMatcher(None,one(q['album']).casefold(),candidate['album'].casefold()).ratio()>=.86)):
+            _deezer_details(candidate,raw,q,request)
+            break
+    return found
 
 
 def itunes(q, request, credentials):
@@ -136,8 +227,9 @@ def itunes(q, request, credentials):
                  albumartist=e.get('collectionArtistName', ''),
                  provider_album_id=e.get('collectionId',''),
                  release_url=e.get('collectionViewUrl',''),release_date=e.get('releaseDate',''),
-                 tracknumber=e.get('trackNumber',''),discnumber=e.get('discNumber',''),
-                 totaltracks=e.get('trackCount',''),totaldiscs=e.get('discCount',''))
+                 tracknumber=e.get('trackNumber'),discnumber=e.get('discNumber'),
+                 totaltracks=e.get('trackCount'),totaldiscs=e.get('discCount'),
+                 genre=e.get('primaryGenreName',''),composer=e.get('composerName',''))
             for e in rows(payload,'results')]
 
 
@@ -177,7 +269,8 @@ def _spotify(q, request, credentials):
                  provider_album_id=(e.get('album') or {}).get('id',''),
                  release_url=((e.get('album') or {}).get('external_urls') or {}).get('spotify',''),
                  release_date=(e.get('album') or {}).get('release_date',''),
-                 tracknumber=e.get('track_number',''),discnumber=e.get('disc_number',''))
+                 tracknumber=e.get('track_number'),discnumber=e.get('disc_number'),
+                 totaltracks=(e.get('album') or {}).get('total_tracks',''))
             for e in rows(payload.get('tracks'),'items')]
 
 
@@ -248,7 +341,11 @@ def _soundcloud(q,request,credentials):
                  (e.get('publisher_metadata') or {}).get('album_title',''),
                  e.get('duration'),(e.get('publisher_metadata') or {}).get('isrc',''),
                  url=e.get('permalink_url',''),
-                 provider_album_id=(e.get('publisher_metadata') or {}).get('album_id',''))
+                 provider_album_id=(e.get('publisher_metadata') or {}).get('album_id',''),
+                 release_date=(e.get('publisher_metadata') or {}).get('release_date',''),
+                 genre=e.get('genre',''),
+                 label=(e.get('publisher_metadata') or {}).get('label_name') or e.get('label_name',''),
+                 composer=(e.get('publisher_metadata') or {}).get('composer',''))
             for e in data[:6]]
 
 
@@ -278,17 +375,23 @@ def lastfm(q,request,credentials):
         # lookup enriches album identity, making Last.fm release-comparable.
         promising=(SequenceMatcher(None,one(q['artist']).casefold(),candidate['artist'].casefold()).ratio()>.9
                    and SequenceMatcher(None,one(q['title']).casefold(),candidate['title'].casefold()).ratio()>.9)
-        if index < 2 and promising and not q.get('album'):
+        if index < 1 and promising:
             try:
                 details=request('lastfm','https://ws.audioscrobbler.com/2.0/',
                     {'method':'track.getInfo','artist':candidate['artist'],
                      'track':candidate['title'],'api_key':key,'format':'json'})
-                album=(details.get('track') or {}).get('album') or {}
-                if isinstance(album,dict):
-                    candidate['album']=one(album.get('title'))[:300]
-                    candidate['albumartist']=one(album.get('artist'))[:300]
-                    candidate['provider_album_id']=one(album.get('mbid'))[:110]
-                    candidate['release_url']=one(album.get('url'))[:800]
+                track=details.get('track') or {}
+                if isinstance(track,dict):
+                    album=track.get('album') or {}
+                    if isinstance(album,dict):
+                        candidate['album']=one(album.get('title'))[:300]
+                        candidate['albumartist']=one(album.get('artist'))[:300]
+                        candidate['provider_album_id']=one(album.get('mbid'))[:110]
+                        candidate['release_url']=one(album.get('url'))[:800]
+                    genres=(track.get('toptags') or {}).get('tag',[])
+                    if isinstance(genres,dict):genres=[genres]
+                    if isinstance(genres,list):
+                        candidate['genre']=_genre(genres)
             except ProviderError:
                 raise
             except Exception:

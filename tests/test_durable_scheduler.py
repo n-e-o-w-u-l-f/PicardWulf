@@ -29,6 +29,40 @@ def wait_for(check, timeout=10):
 
 
 class DurableSchedulerTests(unittest.TestCase):
+    def test_large_existing_backlog_warns_without_unrequested_pause(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store=engine.ResultStore(pathlib.Path(directory)/'queue.db')
+            store.enqueue_many([(str(i), {'artist':'Synthetic','title':str(i)}, False)
+                                for i in range(2001)])
+            adapters=importlib.import_module('picardwulf_s1_test.universal_adapters')
+            class NoNetwork:
+                def request(self,*a,**k):
+                    raise AssertionError('all sources disabled')
+            runner=engine.UniversalAggregator(store=store,credentials={},paused=False,
+                      transport=NoNetwork(),provider_options={'disabled':list(adapters.SOURCES)})
+            try:
+                self.assertTrue(runner.wait_ready())
+                self.assertTrue(runner.status()['large_backlog_detected'])
+                self.assertFalse(runner.status()['paused'])
+            finally:
+                runner.stop()
+                self.assertTrue(runner.wait_stopped(10))
+
+    def test_manually_paused_large_backlog_stays_paused(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store=engine.ResultStore(pathlib.Path(directory)/'queue.db')
+            store.enqueue_many([(str(i), {'artist':'Synthetic','title':str(i)}, False)
+                                for i in range(2001)])
+            runner=engine.UniversalAggregator(store=store,credentials={},paused=True)
+            try:
+                self.assertTrue(runner.wait_ready())
+                self.assertTrue(runner.status()['large_backlog_detected'])
+                self.assertTrue(runner.status()['paused'])
+                self.assertEqual(runner.status()['pending'],0)
+            finally:
+                runner.stop()
+                self.assertTrue(runner.wait_stopped(10))
+
     def test_real_sqlite_full_never_acknowledges_uncommitted_rows(self):
         class LimitedStore(engine.ResultStore):
             def open_writer(self):

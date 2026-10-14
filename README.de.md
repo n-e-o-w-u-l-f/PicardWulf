@@ -40,6 +40,14 @@ Die automatische Übernahme benötigt einen eindeutig bewerteten Treffer (standa
 
 S1 begrenzt den noch nicht dauerhaften Eingang auf **2.048 Aufträge einschließlich laufender Schreibcharge**. Weitere geladene Dateien bleiben über schwache Dateireferenzen vorgemerkt und werden schrittweise erneut aufgenommen. Ein einzelner SQLite-Schreiber übernimmt Datenbankzugriffe und konfigurierbare Chargen (standardmäßig 256); Ergebnisse und Backup-Bestätigungen kommen über Qt-Signale zurück. Vollständige Audiosicherung und Hashing laufen ebenfalls außerhalb des GUI-Threads. Bei Datenbankfehlern pausiert die Suche, der Eingang bleibt erhalten. Deaktivieren startet eine Hintergrundleerung; erneutes Aktivieren wartet im Hintergrund auf deren Bestätigung. **Werkzeuge → PicardWulf → Hintergrundsuche pausieren / fortsetzen** steuert Anbieterabfragen, während die Aufnahme weiterläuft. Ein Rückstand über 2.000 Aufträgen wird beim Start vorsorglich pausiert. **Der synthetische Qt-Test mit 29.000 alten + 10.000 neuen Identitäten auf Legion ist bestanden; BMAX-Laufzeit und Installation bleiben offen.** [Nachweise und Grenzen](docs/planning/S1-EXECUTION-2026-10-14.md).
 
+## Metadaten vollständig sammeln und API-Schlüssel (v1.0)
+
+MusicBrainz, Deezer und Apple/iTunes lieferten ohne eigene API-Schlüssel im öffentlichen Test Treffer. Deezer kann nach erfolgreicher Track- und Albumzuordnung ISRC, Disc-/Tracknummer, Datum, Label, Barcode und Albuminterpret aus offiziellen Detaildaten übernehmen. Der Treffervergleich ist **bidirektional und anbieterneutral**.
+
+SoundCloud stellt neue Anwendungsschlüssel nur mit Artist Pro aus. Spotify-Development-Anwendungen erfordern Premium; Last.fm vergibt API-Schlüssel über das eigene Entwicklerkonto. Keine zusätzlichen Kosten und keine erfundenen Zugangsdaten. Bereits berechtigte Schlüssel werden lokal über **Tools > NEOWULF > Quellen-Zugangsdaten (Windows DPAPI)** eingegeben. Ein großer Rückstand zeigt nun eine Warnung, aber startet keine ungewollte Pause; Ihre manuelle Pause bleibt erhalten.
+
+Siehe [Anbieterzugänge, Freigabegrenzen und sicherer BMAX-Rollout](docs/planning/V1.0-PROVIDER-ACCESS.md). Diese Änderungen sind noch nicht im laufenden Windows-Picard aktiviert.
+
 ## Architekturprüfung und nächster Schritt für v1.0
 
 Die Zielversion bleibt **v1.0**. Die geprüften Risiken und die vor der Freigabe notwendigen Arbeiten sind im [technischen Forschungsbericht](docs/research/PICARDWULF-V1.0-DEEP-RESEARCH-2026-10-14.md) und im [verbindlichen Ausführungsplan](docs/planning/V1.0-NEXT-EXECUTION.md) festgehalten. Zuerst wird die SQLite-Warteschlange vollständig entkoppelt und dauerhaft abgesichert. Diese Recherche hat den laufenden BMAX-Picard nicht verändert.
