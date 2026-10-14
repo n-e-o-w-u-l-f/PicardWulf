@@ -46,6 +46,51 @@ class SaveTrackingTests(unittest.TestCase):
             rec=workflow.backup_envelope(str(source))
         return source,rec
 
+    def test_pre_save_worker_accepts_only_verified_unchanged_source(self):
+        with tempfile.TemporaryDirectory() as directory:
+            src,rec=self.receipt(directory)
+            self.assertTrue(tracking.verify_pre_save_identity(rec,str(src)))
+
+    def test_pre_save_rejects_same_size_and_same_mtime_with_changed_content(self):
+        with tempfile.TemporaryDirectory() as directory:
+            src,rec=self.receipt(directory)
+            original=src.read_bytes()
+            stamp=src.stat()
+            src.write_bytes(b'X'+original[1:])
+            os.utime(src,ns=(stamp.st_atime_ns,stamp.st_mtime_ns))
+            self.assertEqual(src.stat().st_size,rec['size'])
+            self.assertEqual(src.stat().st_mtime_ns,rec['mtime_ns'])
+            with self.assertRaises(workflow.UnsafeCandidate):
+                tracking.verify_pre_save_identity(rec,str(src))
+            self.assertEqual(Path(rec['backup']).read_bytes(),original)
+
+    def test_pre_save_rejects_swapped_inode_even_if_content_matches(self):
+        with tempfile.TemporaryDirectory() as directory:
+            src,rec=self.receipt(directory)
+            old=src.with_suffix('.old')
+            src.rename(old)
+            src.write_bytes(old.read_bytes())
+            os.utime(src,ns=(old.stat().st_atime_ns,rec['mtime_ns']))
+            with self.assertRaises(workflow.UnsafeCandidate):
+                tracking.verify_pre_save_identity(rec,str(src))
+
+    def test_pre_save_rejects_corrupted_backup_without_touching_original(self):
+        with tempfile.TemporaryDirectory() as directory:
+            src,rec=self.receipt(directory)
+            pristine=src.read_bytes()
+            Path(rec['backup']).write_bytes(b'broken')
+            with self.assertRaises(workflow.UnsafeCandidate):
+                tracking.verify_pre_save_identity(rec,str(src))
+            self.assertEqual(src.read_bytes(),pristine)
+
+    def test_pre_save_rejects_unverified_identity_fields(self):
+        with tempfile.TemporaryDirectory() as directory:
+            src,rec=self.receipt(directory)
+            unverified=dict(rec)
+            unverified.pop('inode')
+            with self.assertRaises(workflow.UnsafeCandidate):
+                tracking.verify_pre_save_identity(unverified,str(src))
+
     def test_backup_produces_real_sha_and_full_original_copy(self):
         with tempfile.TemporaryDirectory() as directory:
             src,rec=self.receipt(directory)

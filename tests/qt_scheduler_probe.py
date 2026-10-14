@@ -120,7 +120,7 @@ def backup_cases():
     owner=threading.get_ident()
     saved=[]
     timer_ticks=[]
-    for scenario in ('success','edited','renamed','disabled','failure','replacement'):
+    for scenario in ('success','edited','renamed','disabled','failure','replacement','changed_on_disk'):
         with tempfile.TemporaryDirectory() as directory:
             runner=engine.UniversalAggregator(store=engine.ResultStore(Path(directory)/'queue.db'),
                                                credentials={},paused=True)
@@ -147,7 +147,14 @@ def backup_cases():
                 assert threading.get_ident()==owner
                 assert kwargs.get('verified_backup',{}).get('backup')=='synthetic-backup'
                 saved.append(scenario)
+            def identity_check(*args,**kwargs):
+                assert threading.get_ident()!=owner
+                if scenario=='changed_on_disk':
+                    raise workflow.UnsafeCandidate('synthetic original changed')
+                return True
+            tracking=importlib.import_module('qt_probe.save_tracking')
             with patch.object(workflow,'backup_envelope',backup), \
+                    patch.object(tracking,'verify_pre_save_identity',identity_check), \
                     patch.object(auto,'proposal_for_auto',return_value=({},{})), \
                     patch.object(auto,'apply_best_to_file',side_effect=apply):
                 controller.poll()
@@ -168,7 +175,7 @@ def backup_cases():
             assert runner.wait_stopped(10)
     assert saved==['success'],saved
     assert len(timer_ticks)>=50,len(timer_ticks)
-    print(json.dumps({'backup_scenarios':6,'saved_only_unmodified_identity':True,
+    print(json.dumps({'backup_scenarios':7,'saved_only_unmodified_identity':True,
                       'backup_gui_ticks':len(timer_ticks),'gui_media_operations':0}))
 
 

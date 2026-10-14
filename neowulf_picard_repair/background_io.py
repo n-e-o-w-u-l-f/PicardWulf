@@ -162,6 +162,17 @@ def create_gui_io(parent, engine):
             receipt.add_done_callback(lambda f: self.deliver(token, f))
             return True
 
+        def pre_save_check(self, token, backup, path):
+            # Check file identity and both checksums on the single media worker.
+            # The callback only consumes the boolean result on the Qt thread.
+            if not self.active or any(k.startswith(('backup:', 'preflight:')) for k in self.pending):
+                return False
+            from .save_tracking import verify_pre_save_identity
+            self.pending.add(token)
+            receipt = self.executor.submit(verify_pre_save_identity, dict(backup), str(path))
+            receipt.add_done_callback(lambda f: self.deliver(token, f))
+            return True
+
         def stop(self):
             self.active = False
             self.results.clear()

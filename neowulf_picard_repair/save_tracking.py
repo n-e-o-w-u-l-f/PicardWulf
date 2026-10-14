@@ -41,6 +41,37 @@ def check_backup_receipt(backup, source_path):
     return True
 
 
+def verify_pre_save_identity(backup, source_path):
+    """Worker-only fail-closed verification immediately before requesting File.save().
+
+    The backup was verified after creation, but the original may have changed
+    while a Qt signal waited for delivery. Recheck the persistent identity
+    AND the actual bytes on a worker. Do not use this from a GUI callback.
+    """
+    check_backup_receipt(backup, source_path)
+    for key in ('dev', 'inode'):
+        value = backup.get(key)
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            raise UnsafeCandidate('Datei-Identitätsnachweis fehlt; nicht speichern.')
+    source=Path(source_path)
+    copy=Path(backup['backup'])
+    if not source.is_file() or source.is_symlink():
+        raise UnsafeCandidate('Originaldatei fehlt oder ist jetzt ein Link.')
+    if not copy.is_file() or copy.is_symlink():
+        raise UnsafeCandidate('Audio-Backup fehlt oder ist jetzt ein Link.')
+    def identity(stat):
+        return stat.st_dev,stat.st_ino,stat.st_size,stat.st_mtime_ns
+    expected=(backup['dev'],backup['inode'],backup['size'],backup['mtime_ns'])
+    if identity(source.stat())!=expected:
+        raise UnsafeCandidate('Originaldatei nach Sicherung verändert; nicht speichern.')
+    # An unchanged size/timestamp is not proof that the bytes are unchanged.
+    if _sha256(source)!=backup['sha256'] or _sha256(copy)!=backup['sha256']:
+        raise UnsafeCandidate('Originaldatei oder Backup stimmt nicht mit SHA-256 überein.')
+    if identity(source.stat())!=expected:
+        raise UnsafeCandidate('Originaldatei während der Nachprüfung verändert.')
+    return True
+
+
 def verify_saved_tags(path, expected, backup):
     """Background ONLY: audio-file existence, independent tag readback, backup hash.
 

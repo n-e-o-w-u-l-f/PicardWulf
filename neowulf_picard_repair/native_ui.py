@@ -205,7 +205,7 @@ def show_native_window(api, aggregator, files, snapshot_func, save_tracker=None)
             identity=(str(f.filename),id(f),json.dumps(dict(f.metadata),sort_keys=True))
             if not io.backup('backup:manual',f.filename):
                 raise UnsafeCandidate('Hintergrundsicherung ist ausgelastet.')
-            pending_save[0]=(weakref.ref(f),identity,dict(proposal))
+            pending_save[0]=('backup',weakref.ref(f),identity,dict(proposal),None)
             save.setEnabled(False)
             status.setText('Original wird im Hintergrund gesichert. Noch keine Tags geändert.')
         except Exception as e:
@@ -214,40 +214,51 @@ def show_native_window(api, aggregator, files, snapshot_func, save_tracker=None)
 
     def finish_save():
         if pending_save[0] is None:return
-        receipt=io.backups.pop('backup:manual',None)
+        stage,ref,identity,proposal,backup=pending_save[0]
+        token='backup:manual' if stage=='backup' else 'preflight:manual'
+        receipt=io.backups.pop(token,None)
         if receipt is None:return
-        ref,identity,proposal=pending_save[0]
         pending_save[0]=None
-        save.setEnabled(True)
         f=ref()
         try:
-            if 'error' in receipt:raise UnsafeCandidate('Hintergrundsicherung fehlgeschlagen.')
+            if 'error' in receipt:raise UnsafeCandidate('Sicherung/Identitätsprüfung fehlgeschlagen.')
             if (f is None or str(f.filename)!=identity[0] or id(f)!=identity[1] or
                     json.dumps(dict(f.metadata),sort_keys=True)!=identity[2]):
                 raise UnsafeCandidate('Datei oder Vorschau inzwischen geändert; nichts gespeichert.')
             from .save_tracking import check_backup_receipt
-            check_backup_receipt(receipt['value'],f.filename)
+            if stage=='backup':
+                backup=receipt['value']
+                check_backup_receipt(backup,f.filename)
+                if not io.pre_save_check('preflight:manual',backup,f.filename):
+                    raise UnsafeCandidate('Vor-Speicher-Prüfung ist ausgelastet.')
+                pending_save[0]=('preflight',ref,identity,proposal,backup)
+                status.setText('Backup angelegt; Original und Prüfsummen werden erneut überprüft.')
+                return
+            if receipt.get('value') is not True:
+                raise UnsafeCandidate('Original-Identität nicht bestätigt; nicht speichern.')
             if save_tracker is None:
                 raise UnsafeCandidate('Nachprüfung via Picard-Post-Save-Hook nicht verfügbar.')
             old=Metadata()
             old.copy(f.metadata)
-            token=None
+            save_token=None
             try:
-                token=save_tracker.register(f,receipt['value'],proposal)
+                save_token=save_tracker.register(f,backup,proposal)
                 for field,value in proposal.items():f.metadata[field]=value
                 f.update()
                 f.save()
             except Exception:
-                if token is not None:save_tracker.abort(f,token)
+                if save_token is not None:save_tracker.abort(f,save_token)
                 f.metadata.copy(old)
                 f.update()
                 raise
             QMessageBox.information(dlg,'PicardWulf – Speicherung gestartet',
-                f'Backup: {receipt["value"]["backup"]}\n\n'
+                f'Backup: {backup["backup"]}\n\n'
                 'Picard speichert asynchron. Erst der Post-Save-Hook und eine '
                 'separate Hintergrundprüfung dürfen einen Erfolg bestätigen. '
                 'Die Prüfung ist unter NEOWULF → Tag-Speicherstatus einsehbar.')
         except Exception as exc:warn(exc)
+        finally:
+            if pending_save[0] is None:save.setEnabled(True)
 
     chooser.currentIndexChanged.connect(update_view)
     refresh.clicked.connect(start_refresh)

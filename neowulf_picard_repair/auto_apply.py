@@ -258,8 +258,8 @@ class AutoApplyController:
                     if self._backup_wait is not None:continue
                     token='backup:auto'
                     if not self.io.backup(token,path):continue
-                    self._backup_wait=(identity,watch,result,
-                                       json.dumps(dict(file.metadata),sort_keys=True))
+                    self._backup_wait=('backup',identity,watch,result,
+                                       json.dumps(dict(file.metadata),sort_keys=True),None)
                     continue
                 report=apply_best_to_file(file,watch.query,result['payload'])
             except UnsafeCandidate as exc:
@@ -275,22 +275,32 @@ class AutoApplyController:
 
     def _finish_backup(self):
         if self._backup_wait is None:return
-        receipt=self.io.backups.pop('backup:auto',None)
+        stage,identity,watch,result,baseline,backup=self._backup_wait
+        token='backup:auto' if stage=='backup' else 'preflight:auto'
+        receipt=self.io.backups.pop(token,None)
         if receipt is None:return
-        identity,watch,result,baseline=self._backup_wait
         self._backup_wait=None
         file=watch.file_ref()
         if (file is None or self.watches.get(identity) is not watch or
                 getattr(file,'filename',None)!=identity[0] or id(file)!=watch.identity or
                 json.dumps(dict(file.metadata),sort_keys=True)!=baseline or
+                self.engine.paused or
                 not self.api.plugin_config.get('auto_save_with_backup',False) or
                 not self.api.plugin_config.get('auto_apply_best',True)):
             if self.watches.get(identity) is watch:self.watches.pop(identity,None)
             return
         try:
-            if 'error' in receipt:raise UnsafeCandidate('Hintergrundsicherung fehlgeschlagen.')
+            if 'error' in receipt:raise UnsafeCandidate('Sicherung/Identitätsprüfung fehlgeschlagen.')
+            if stage=='backup':
+                backup=receipt['value']
+                if not self.io.pre_save_check('preflight:auto',backup,identity[0]):
+                    raise UnsafeCandidate('Vor-Speicher-Prüfung ist ausgelastet.')
+                self._backup_wait=('preflight',identity,watch,result,baseline,backup)
+                return
+            if receipt.get('value') is not True:
+                raise UnsafeCandidate('Original-Identität nicht bestätigt; nicht speichern.')
             apply_best_to_file(file,watch.query,result['payload'],save=True,
-                               verified_backup=receipt['value'],save_tracker=self.save_tracker)
+                               verified_backup=backup,save_tracker=self.save_tracker)
         except Exception as exc:
             self.api.logger.warning('PicardWulf backup/save: %s',type(exc).__name__)
         self.watches.pop(identity,None)

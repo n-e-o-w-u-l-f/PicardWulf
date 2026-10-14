@@ -105,6 +105,13 @@ Updated: 2026-10-14 · Project: `n-e-o-w-u-l-f/PicardWulf`
 - Verified: 212 local unit tests PASS and real Qt offscreen context dialog probe PASS (two release choices, Deezer first, both forced asynchronous queries). **Not yet verified on BMAX**: actual plugin loaded and current API provider auth. Tailscale BMAX port reachable but remote authenticated operation blocked by platform; RDC remaining quota 0; no audio originals changed.
 - Installation requires an updated full archive (two new .py modules), not just the installer PS1. Version target remains v1.0; no stable tag before actual BMAX S5 acceptance.
 
+## S4 pre-save identity source checkpoint — 2026-10-15
+
+- Target is **v1.0**. Continued from clean HEAD 9d5bf679759c4a09343874dff88829ea3c3afcbe; earlier S1/S2/S3 and cross-source context-menu features were not reimplemented.
+- Fixed the post-backup/original-mutation gap with off-GUI device/inode/size/mtime and SHA256 preflight, and a second queued Qt acknowledgement before automatic/manual Picard File.save().
+- 223 standalone Python tests PASS on Legion. Real Qt probe updated but cannot execute with current system Python because PyQt6 is absent; the actual-Qt gate is OPEN, not passed. [S4 pre-save evidence](docs/planning/S4-PRESAVE-IDENTITY-2026-10-15.md).
+- Residual asynchronous File.save() TOCTOU and BMAX runtime S0/S5 gates are OPEN; no process restart, original media writes, access bypass, paid CI or provider purchase.
+
 ## Next safe actions
 
 ### S1 source checkpoint — 2026-10-14
