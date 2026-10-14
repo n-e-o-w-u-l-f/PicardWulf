@@ -78,6 +78,15 @@ Updated: 2026-10-14 · Project: `n-e-o-w-u-l-f/PicardWulf`
 - Four synthetic regressions, 180 local tests PASS. See [provider completeness](docs/planning/V1.0-PROVIDER-COMPLETENESS-2026-10-14.md).
 - No BMAX changes; authentic SoundCloud/Spotify/Last.fm developer credentials and S4/S5 Windows runtime acceptance remain OPEN. Target is v1.0 only.
 
+## S5 publication and BMAX remote-access check — 2026-10-14
+
+- Windows S4 installer manifest omitted save_tracking.py. RED/ GREEN regression verifies all Python modules in required installer files; 198 local Python tests PASS.
+- Commit 34cf49c8851cf66ae5f672f56aec8aefc538d955 pushed to GitHub main and remote HEAD verified; Git/Bash from authorized Legion account works. A previous execution policy rejection was not evidence of a Git executable malfunction.
+- SentinelX has only Legion connected (free one-host slot). Remote Desktop Commander connection quota is 0 percent. BMAX is reachable over Tailnet but its normal SSH public-key user authentication was previously denied.
+- Tailscale SSH wrapper cannot serve Windows destinations: official Tailscale SSH server supports Linux and selected macOS daemon devices only (https://tailscale.com/docs/features/tailscale-ssh). Hostname DNS maps to the already pinned endpoint, and the observed ED25519 key matched the existing IP pin; the alias was added without disabling StrictHostKeyChecking. A retry still failed Tailscale SSH coordination-host-key verification, as expected on Windows. DO_NOT_REPEAT the Tailscale SSH wrapper for Windows.
+- Next authorized operation: establish ordinary Windows OpenSSH user authorization from the BMAX desktop, or an existing eligible remote-management connection; only then run live installer with plugin disabled and Picard still open. No password guessing, host-verification bypass, process termination, original-music edits or installed-plugin change.
+- S5 deployment and BMAX post-save/restore verification remain BLOCKED by absent authenticated remote execution, not by repository publication. Target is v1.0 only.
+
 ## Next safe actions
 
 ### S1 source checkpoint — 2026-10-14
