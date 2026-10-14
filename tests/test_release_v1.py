@@ -41,7 +41,7 @@ class TestPackaging(unittest.TestCase):
         self.assertIn('Pluginordner hat unbekannte lokale Aenderungen',self.installer)
     def test_license_changelog(self):
         self.assertIn('MIT License',(ROOT/'LICENSE').read_text(encoding='utf8'))
-        self.assertIn('1.0.0',(ROOT/'CHANGELOG.md').read_text(encoding='utf8'))
+        self.assertIn('## PicardWulf v1.0 — Target release',(ROOT/'CHANGELOG.md').read_text(encoding='utf8'))
     def test_bmax_live_status_disclaimed(self):
         self.assertIn('not yet verified',(ROOT/'README.md').read_text(encoding='utf8'))
 

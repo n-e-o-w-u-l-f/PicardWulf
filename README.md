@@ -118,7 +118,7 @@ Apple Music remains provider provenance, never albumartist.
 
 After **Add Folder**, PicardWulf searches the enabled providers asynchronously and compares release candidates using a **source-neutral score**: track title, artist, album, album artist, duration, ISRC and compatible MusicBrainz recording ID. Independent provider agreement counts only for the **same named release**, not unrelated compilations or editions. Different known provider album IDs and MusicBrainz release IDs remain distinct.
 
-A winner normally requires at least **93.5%** confidence and a meaningful margin over a different release; questionable filename-derived guesses, artist conflicts and ambiguous editions are left for review. The candidate's actual provider appears as `~picardwulf_source` and the score as `~picardwulf_score` in Picard's private metadata.
+A winner normally requires a matching score of at least **93.5/100** and a meaningful margin over a different release; questionable filename-derived guesses, artist conflicts and ambiguous editions are left for review. The candidate's actual provider appears as `~picardwulf_source` and the score as `~picardwulf_score` in Picard's private metadata.
 
 - **Tools → PicardWulf → Automatische Release-Auswahl ein-/ausschalten**: on by default for metadata inside Picard.
 - **Tools → PicardWulf → Automatisches Tag-Speichern mit Backup ein-/ausschalten**: **OFF by default**. Explicitly enabling it allows unattended writes for unambiguous matches, with a full verified backup of each audio file before Picard's asynchronous save. Always test on copies first.
@@ -151,6 +151,13 @@ To update **without quitting Picard**, while the PicardWulf plugin is disabled, 
 The updated plugin stages new jobs in memory on the GUI thread and writes them to SQLite in groups of 256 on a separate worker. The auto-apply timer reads completed results in a single bounded batch and fairly rotates across files. **Tools → PicardWulf → Hintergrundsuche pausieren / fortsetzen (ohne Picard-Neustart)** pauses/resumes scheduling new provider calls while keeping the backlog; up to two already-running requests may complete. A backlog greater than 2,000 jobs at plugin startup is automatically paused to avoid surprise network saturation after a live upgrade. Resume it when the UI is responsive and the queue size is understood.
 
 **Status:** Tested on Legion with 10,000 synthetic jobs; real BMAX process health and in-Picard hot-reload remain unverified, and the fix cannot modify code already imported by a running plugin until Picard's plugin manager reloads it.
+
+## v1.0 architecture review and next implementation step
+
+The sole target version remains **PicardWulf v1.0**. A source-backed stability assessment has identified remaining risks in GUI/SQLite operations, staging durability, provider quotas, uncalibrated release confidence and asynchronous media writes. The next step is **S1: bounded durable scheduling and completely non-blocking GUI integration**. No claim of Windows runtime remediation is made from this research alone.
+
+- [Deep architecture / API research](docs/research/PICARDWULF-V1.0-DEEP-RESEARCH-2026-10-14.md)
+- [Sequenced execution and acceptance gates](docs/planning/V1.0-NEXT-EXECUTION.md)
 
 ## Development and verification
 

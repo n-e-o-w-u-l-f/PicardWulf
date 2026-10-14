@@ -1,6 +1,10 @@
 # Changelog
 
-## 1.0.1 bulk-import responsiveness hotfix — 2026-10-14 (BMAX runtime pending)
+## PicardWulf v1.0 — Target release (Windows runtime acceptance pending)
+
+All changes below belong to the **same v1.0 development target**. A completed local fix is a development milestone, not a new product release. The version remains v1.0 until all release acceptance criteria have been met.
+
+### 2026-10-14 — Bulk-import responsiveness and live plugin update
 
 - Removed per-file SQLite read/write from the Picard file-load and bulk-refresh GUI hooks; work is batched and durably enqueued by a dedicated writer thread.
 - Added bounded, fair GUI result polling with one batch SQLite read instead of up to 24 individual database opens per timer tick.
@@ -10,7 +14,7 @@
 - Stress-tested 10,000 synthetic imported tracks and durable SQLite recovery, in addition to preexisting tests.
 - **Not a claim of live repair:** no executable BMAX remote-control session is available; user-session GUI health and hot-reload still need direct confirmation.
 
-## 1.0.0 source-ranking update — 2026-10-14 (runtime candidate)
+### 2026-10-14 — Cross-provider release ranking
 
 - Added automatic best-release selection after Add Folder: MusicBrainz has no built-in ranking priority.
 - Source-neutral matching compares artist/title/album/album artist/duration, exact ISRC/MBID conflicts and release-specific corroboration.
@@ -22,7 +26,7 @@
 - Added 11 cross-linked READMEs (English, German, Russian, French, Spanish, Italian, Portuguese-BR, Polish, Ukrainian, Japanese, Simplified Chinese).
 - Local tests expanded to 110; BMAX Windows runtime, live provider responses and asynchronous tag writing remain NOT VERIFIED.
 
-## 1.0.0 — 2026-10-14 (candidate; BMAX runtime gate pending)
+### 2026-10-14 — Base plugin and native matching
 
 - Added Picard-native MusicBrainz release/recording linking from shared candidate review.
 - Added explicit tag-field diff preview, opt-in native saving and hash-verified full audio backups.

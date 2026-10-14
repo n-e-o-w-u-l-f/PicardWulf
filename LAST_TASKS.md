@@ -2,6 +2,13 @@
 
 Updated: 2026-10-14 · Project: `n-e-o-w-u-l-f/PicardWulf`
 
+## Fixed target version
+
+- **TARGET_VERSION: v1.0** (no interim v1.0.1 / 1.0.0 version designation for source milestones).
+- Changes for provider matching, scalability, installer recovery, documentation and BMAX runtime fixes all belong to the same PicardWulf v1.0 target.
+- Do not announce a release as stable until end-to-end Windows runtime, native matching, provider permissions and safe tag persistence are verified. Commits are development milestones, not new versions.
+- Acceptance must be verified on actual BMAX Picard 3 before a release tag is considered.
+
 ## Source of truth
 
 - GitHub repository: https://github.com/n-e-o-w-u-l-f/PicardWulf
@@ -26,7 +33,7 @@ Updated: 2026-10-14 · Project: `n-e-o-w-u-l-f/PicardWulf`
 
 ## Validation
 
-- **PASS**: 119 Python unit/contract tests on Legion using self-contained packaged sources (`python3 -m unittest discover -s tests -q`), 2026-10-14.
+- **PASS**: 120 Python unit/contract tests on Legion using self-contained packaged sources (`python3 -m unittest discover -s tests -q`), 2026-10-14.
 - **PASS**: `git diff --check` before push; GitHub code, README and file tree read back; fast-forward push succeeded.
 - **PENDING**: actual installer/plugin activation on Windows BMAX-B6 as `megal`; the release is a candidate, not a production-verified binary.
 - **PENDING**: live credentials/API responses, rate limits and terms for individual providers.
@@ -43,6 +50,16 @@ Updated: 2026-10-14 · Project: `n-e-o-w-u-l-f/PicardWulf`
 - **DO_NOT_REPEAT:** no mass `RefreshAction.schedule()` writes on Qt thread, no DB deletion, no forced Picard termination, no bulk unbacked audio writes, no claiming a patched GitHub checkout repaired the already-running Windows Python process.
 - **FIX IMPLEMENTED:** `schedule_async` with memory staging and 256-row SQLite batches, fair/one-query GUI timer, pause/resume UI, auto-pause huge existing backlog on startup, opt-in live plugin swap with Picard still running.
 - **VALIDATION:** 119 local tests, including 10k-job durable ingest and paused-backlog recovery. **PENDING:** BMAX actual process health; plugin disable → live update → enable; queue counts and responsiveness; provider calls/limits while resumed.
+
+## Research checkpoint — PicardWulf v1.0 stability (2026-10-14)
+
+- **TARGET_VERSION = v1.0**, source development milestones are not new versions.
+- Primary source-backed research: [Architecture and API evidence](docs/research/PICARDWULF-V1.0-DEEP-RESEARCH-2026-10-14.md).
+- Next authorized development plan: [S0–S5 with gates](docs/planning/V1.0-NEXT-EXECUTION.md); next code phase S1 must follow S0 observations where runtime access is available, otherwise proceed with isolated local simulation.
+- **CRITICAL remaining**: unbounded volatile staging before SQLite durability; SQLite reads on GUI QTimer; synchronous full-media backup/hashing in GUI. These are code findings, **not proof** Picard is currently hung for a particular reason.
+- **HIGH remaining**: 429/503 partial results prematurely finalized, edition-level matching not calibrated, 2026 Spotify/SoundCloud restrictions and OAuth token management, post-save success receipt missing.
+- 119 existing tests and target-version regression are baseline; **BMAX 29k+10k runtime acceptance still OPEN**.
+- Research made no BMAX process changes, no media modifications, no paid API purchases, no user-secret uploads.
 
 ## Next safe actions
 

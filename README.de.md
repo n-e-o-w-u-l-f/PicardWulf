@@ -40,6 +40,10 @@ Die automatische Übernahme benötigt einen eindeutig bewerteten Treffer (standa
 
 Das Update nutzt eine im Hintergrund geschriebene SQLite-Sammelwarteschlange (je 256 Aufträge), eine faire, gebündelte Ergebnisprüfung und **Werkzeuge → PicardWulf → Hintergrundsuche pausieren / fortsetzen**. Ein beim Pluginstart vorhandener Rückstand von mehr als 2.000 Aufträgen wird vorsorglich pausiert und kann gezielt wieder gestartet werden. **Die 10.000-Dateien-Belastungsprüfung auf Legion ist bestanden; der Zustand des laufenden Picard auf BMAX-B6 ist noch nicht direkt überprüft.**
 
+## Architekturprüfung und nächster Schritt für v1.0
+
+Die Zielversion bleibt **v1.0**. Die geprüften Risiken und die vor der Freigabe notwendigen Arbeiten sind im [technischen Forschungsbericht](docs/research/PICARDWULF-V1.0-DEEP-RESEARCH-2026-10-14.md) und im [verbindlichen Ausführungsplan](docs/planning/V1.0-NEXT-EXECUTION.md) festgehalten. Zuerst wird die SQLite-Warteschlange vollständig entkoppelt und dauerhaft abgesichert. Diese Recherche hat den laufenden BMAX-Picard nicht verändert.
+
 ## Sicherheit und Grenzen
 
 MusicBrainz, Deezer und iTunes können ohne zusätzliche Zugangsdaten abgefragt werden, sofern ihre öffentlichen Dienste erreichbar sind. Spotify, SoundCloud und Last.fm benötigen legitime Zugangsdaten. Es findet **keine Umgehung von API-Limits** statt. Suchbegriffe werden an aktivierte Metadatenanbieter übertragen.

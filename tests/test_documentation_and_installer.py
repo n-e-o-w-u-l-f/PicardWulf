@@ -26,6 +26,18 @@ class DocumentationAndInstaller(unittest.TestCase):
             self.assertIn('Deezer',content)
             self.assertIn('Spotify',content)
 
+    def test_single_target_version_is_v1_0(self):
+        changelog=(ROOT/'CHANGELOG.md').read_text(encoding='utf-8')
+        manifest=(ROOT/'neowulf_picard_repair/MANIFEST.toml').read_text(encoding='utf-8')
+        readme=(ROOT/'README.md').read_text(encoding='utf-8')
+        self.assertIn('PicardWulf v1.0 — Target release',changelog)
+        self.assertIn('PicardWulf v1.0',manifest)
+        self.assertIn('# PicardWulf v1.0',readme)
+        # Source work must not silently bump the user-defined target release.
+        for text in (changelog,manifest,readme):
+            self.assertNotIn('1.0.1',text)
+        self.assertNotIn('## 1.0.0',changelog)
+
     def test_upgrade_from_v1_v2_v3_is_protected(self):
         installer=(ROOT/'Install-NEOWULF.ps1').read_text(encoding='utf-8')
         for name in ('Matches-Known-V1','Matches-Known-V2','Matches-Known-V3',
