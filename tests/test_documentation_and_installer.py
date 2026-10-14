@@ -48,6 +48,18 @@ class DocumentationAndInstaller(unittest.TestCase):
         self.assertIn('auto_selection.py',installer)
         self.assertIn('auto_apply.py',installer)
 
+    def test_installer_checks_every_shipped_python_module(self):
+        import re
+        installer=(ROOT/'Install-NEOWULF.ps1').read_text(encoding='utf8')
+        start=installer.index('$required = @(')
+        end=installer.index(')',start)
+        required=set(re.findall(r"'([A-Za-z_]+\.py)'",installer[start:end]))
+        modules={path.name for path in (ROOT/'neowulf_picard_repair').glob('*.py')}
+        self.assertEqual(required,modules,
+                         'Installer darf keine neuen Import-Module vergessen; '
+                         'Files-Match muss ALLE Dateien pruefen.')
+        self.assertIn('save_tracking.py',required)
+
     def test_source_neutral_plugin_hooks_and_options(self):
         plugin=(ROOT/'neowulf_picard_repair/__init__.py').read_text(encoding='utf-8')
         for registration in ('api.register_album_metadata_processor(_album_guard',
