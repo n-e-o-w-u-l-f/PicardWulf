@@ -159,7 +159,7 @@ def show_similar_albums(api, aggregator, files, snapshot_func):
             QMessageBox.StandardButton.No
         )
         if reply==QMessageBox.StandardButton.Yes:
-            show_native_window(api,aggregator,[files[i]],snapshot_func)
+            show_native_window(api,aggregator,[files[i]],snapshot_func,preferred_candidate=candidate)
 
     details.clicked.connect(inspect)
     close.clicked.connect(dlg.reject)

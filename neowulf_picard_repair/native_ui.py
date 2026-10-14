@@ -13,7 +13,19 @@ from .universal_engine import clean_track, query_key
 from .universal_adapters import one
 
 
-def show_native_window(api, aggregator, files, snapshot_func, save_tracker=None):
+def same_provider_track_selection(selected, candidate):
+    """Match one reviewed source+release+recording, never just album text."""
+    if not selected or not candidate or selected.get('source')!=candidate.get('source'):
+        return False
+    key='release_mbid' if selected.get('source')=='musicbrainz' else 'provider_album_id'
+    if selected.get(key) or candidate.get(key):
+        if str(selected.get(key) or '')!=str(candidate.get(key) or ''):
+            return False
+    return all(str(selected.get(name) or '').casefold()==str(candidate.get(name) or '').casefold()
+               for name in ('title','artist','album'))
+
+
+def show_native_window(api, aggregator, files, snapshot_func, save_tracker=None, preferred_candidate=None):
     from PyQt6.QtCore import QTimer
     from PyQt6.QtWidgets import (
         QAbstractItemView, QComboBox, QDialog, QHBoxLayout, QLabel, QMessageBox,
@@ -60,6 +72,7 @@ def show_native_window(api, aggregator, files, snapshot_func, save_tracker=None)
     layout.addLayout(buttons)
 
     available=[]
+    preferred_to_select=[preferred_candidate]
     last_view_signature=[None]
     def current_file():
         idx=chooser.currentData()
@@ -119,6 +132,12 @@ def show_native_window(api, aggregator, files, snapshot_func, save_tracker=None)
                   c.get('isrc',''),c.get('release_mbid',''),c.get('provider_album_id',''))
             for k,v in enumerate(vals):
                 table.setItem(j,k,QTableWidgetItem(str(v)))
+        if preferred_to_select[0] is not None:
+            row_index=next((i for i,candidate in enumerate(available)
+                            if same_provider_track_selection(preferred_to_select[0],candidate)),None)
+            if row_index is not None:
+                table.selectRow(row_index)
+                preferred_to_select[0]=None
         table.resizeColumnsToContents()
         by_source=', '.join(f'{name}:{state}' for name,state in payload.get('status',{}).items())
         auto=payload.get('auto') or {}

@@ -6,7 +6,7 @@ pretend that a non-MusicBrainz provider release has a MusicBrainz UUID.
 from collections import defaultdict
 import re
 
-from .auto_selection import source_neutral_score, edition_conflicts, version_markers
+from .auto_selection import source_neutral_score, edition_conflicts, version_markers, EDITION_FIELDS
 from .universal_engine import norm, similarity
 
 MINIMUM_ALBUM_MATCH = 0.75
@@ -23,11 +23,20 @@ def _identifier(row):
 
 
 def _group_key(row):
-    return (norm(row.get('source')), _identifier(row),
-            norm(row.get('album')), norm(row.get('albumartist') or row.get('artist')),
-            version_markers(row.get('album')),
-            norm(row.get('release_date')), norm(row.get('barcode')),
-            norm(row.get('totaltracks')))
+    source=norm(row.get('source'))
+    release_id=_identifier(row)
+    album=norm(row.get('album'))
+    if release_id:
+        # An authoritative source-scoped album ID is the release grouping
+        # anchor. Optional album detail fields differ in completeness between
+        # search and album-detail endpoints; splitting by them loses real
+        # tracks. Contradictory *present* fields are rejected below.
+        return (source,release_id,album,version_markers(row.get('album')))
+    # Never use a missing ID as proof two editions are the same. Keep the
+    # fallback conservative and distinct by observable edition attributes.
+    return (source,'',album,norm(row.get('albumartist') or row.get('artist')),
+            version_markers(row.get('album')),norm(row.get('release_date')),
+            norm(row.get('barcode')),norm(row.get('totaltracks')))
 
 
 def find_similar_albums(queries, result_envelopes, *, threshold=MINIMUM_ALBUM_MATCH):
@@ -42,7 +51,11 @@ def find_similar_albums(queries, result_envelopes, *, threshold=MINIMUM_ALBUM_MA
     count=len(queries)
     if not count or count>MAX_GROUP_TRACKS:
         return []
-    releases=defaultdict(lambda:defaultdict(dict))
+    releases=defaultdict(dict)
+    # A provider returning mutually contradictory edition fields for the
+    # *same* ID is unreliable. Do not silently merge those candidate tracks.
+    release_evidence=defaultdict(dict)
+    conflicting=set()
     for i,(q,data) in enumerate(zip(queries,result_envelopes)):
         if not isinstance(data,dict):
             continue
@@ -60,12 +73,33 @@ def find_similar_albums(queries, result_envelopes, *, threshold=MINIMUM_ALBUM_MA
             key=_group_key(row)
             if not key[2]:
                 continue
+            # One aggregated evidence snapshot per official release ID is
+            # sufficient and bounded. Pairwise 200x200 comparisons would run
+            # on Picard's Qt thread every refresh. Missing optional values
+            # never erase verified ones; prefer the most precise compatible
+            # release date to detect conflicting month/day information.
+            evidence=release_evidence[key]
+            if evidence:
+                conflicts=set(edition_conflicts(row,evidence))-{'tracknumber','discnumber'}
+                if conflicts:
+                    conflicting.add(key)
+            for field in EDITION_FIELDS:
+                if field in ('tracknumber','discnumber'):
+                    continue  # naturally differs between album tracks
+                value=row.get(field)
+                if not value:
+                    continue
+                old_value=evidence.get(field)
+                if not old_value or (field=='release_date' and len(str(value))>len(str(old_value))):
+                    evidence[field]=value
             # Do not let duplicate catalogue hits count as multiple album tracks.
             old=releases[key].get(i)
             if old is None or match>old[0]:
                 releases[key][i]=(match,row)
     ranked=[]
     for key,by_track in releases.items():
+        if key in conflicting:
+            continue
         coverage=len(by_track)/count
         if coverage<MINIMUM_TRACK_COVERAGE:
             continue

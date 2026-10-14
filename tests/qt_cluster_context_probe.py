@@ -8,7 +8,8 @@ import sys
 import time
 import types
 from PyQt6.QtCore import QTimer
-from PyQt6.QtWidgets import QApplication, QDialog, QTableWidget
+from PyQt6.QtWidgets import QApplication, QDialog, QTableWidget, QMessageBox, QPushButton
+from unittest.mock import patch
 
 ROOT=Path(__file__).parents[1]
 pkg=types.ModuleType('qt_cluster_live')
@@ -52,7 +53,8 @@ def run():
     files=[File(1),File(2)]
     source=TestEngine(files)
     api=types.SimpleNamespace(logger=types.SimpleNamespace(warning=lambda *a:None))
-    status={'rows':0,'winner':''}
+    status={'rows':0,'winner':'','selected_source':''}
+    reviewed=[]
     timer=QTimer()
     started=time.monotonic()
     def check():
@@ -63,16 +65,27 @@ def run():
         if table is not None and table.rowCount()>=2:
             status['rows']=table.rowCount()
             status['winner']=table.item(0,2).text()
+            table.selectRow(0)
+            details=next(b for b in dialog.findChildren(QPushButton)
+                         if b.text()=='Ausgewählten Treffer prüfen')
+            details.click()
             dialog.reject()
         elif time.monotonic()-started>3:
             dialog.reject()
     timer.timeout.connect(check)
     timer.start(10)
-    ui.show_similar_albums(api,source,files,lambda f:f.metadata)
+    native=importlib.import_module('qt_cluster_live.native_ui')
+    with patch.object(QMessageBox,'question',
+                      return_value=QMessageBox.StandardButton.Yes), \
+         patch.object(native,'show_native_window',
+                      side_effect=lambda *a,**kw: reviewed.append(kw['preferred_candidate'])):
+        ui.show_similar_albums(api,source,files,lambda f:f.metadata)
     timer.stop()
     assert status['rows']>=2,status
     assert status['winner']=='deezer',status
     assert len(source.scheduled)==2 and all(force for _,force in source.scheduled),source.scheduled
-    print('PASS: real Qt dialog displayed %d provider release options; Deezer highest'%status['rows'])
+    assert len(reviewed)==1 and reviewed[0]['source']=='deezer',reviewed
+    assert reviewed[0]['provider_album_id']=='9955',reviewed
+    print('PASS: real Qt dialog displayed %d provider release options; Deezer highest and selected in review'%status['rows'])
 
 if __name__=='__main__':run()

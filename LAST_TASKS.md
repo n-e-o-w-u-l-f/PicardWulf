@@ -112,6 +112,15 @@ Updated: 2026-10-14 · Project: `n-e-o-w-u-l-f/PicardWulf`
 - 223 standalone Python tests PASS on Legion. Real Qt probe updated but cannot execute with current system Python because PyQt6 is absent; the actual-Qt gate is OPEN, not passed. [S4 pre-save evidence](docs/planning/S4-PRESAVE-IDENTITY-2026-10-15.md).
 - Residual asynchronous File.save() TOCTOU and BMAX runtime S0/S5 gates are OPEN; no process restart, original media writes, access bypass, paid CI or provider purchase.
 
+## S5 album grouping/readback/performance repair — 2026-10-15
+
+- Baseline GitHub/local HEAD fb9f08d (contains concurrently published S4 pre-save identity repair); clean before editing.
+- RED→GREEN: same official provider album ID split by sparse optional release metadata (4-track group reduced to 3); now prefer actual provider release ID and abstain if present edition fields conflict. Distinct provider IDs still separate.
+- RED→GREEN: 200-track group previously produced 20,100 edition-conflict comparisons on GUI timer. Accumulated per-release evidence bounded to linear comparisons (<650 in 200-track regression).
+- Selected Deezer/MusicBrainz row is carried through to the per-track details dialog without writing audio; real offscreen PyQt6 probe verifies Deezer wins and the correct selected release goes into review.
+- **228 local Python tests PASS**, real Qt source-selection probe PASS; latest BMAX v1.0 installed/runtime state still UNKNOWN without authorized remote Windows execution, no client music touched.
+- [S5 release grouping evidence](docs/planning/V1.0-S5-CLUSTER-CORRECTIONS-2026-10-15.md). Target v1.0; Windows rollout and actual provider credentials remain OPEN.
+
 ## Next safe actions
 
 ### S1 source checkpoint — 2026-10-14

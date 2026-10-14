@@ -28,6 +28,12 @@
 
 All changes below belong to the **same v1.0 development target**. A completed local fix is a development milestone, not a new product release. The version remains v1.0 until all release acceptance criteria have been met.
 
+### 2026-10-15 — S5 fix sparse album fields, 200-track Qt ranking cost and selected-release review
+
+- Fix source-ID-anchored album grouping where missing per-track optional release fields previously fragmented one authentic album; skip releases carrying contradictory explicit edition facts.
+- Reduce costly quadratic GUI conflict checks to bounded per-release accumulated facts and retain selected album/provider in track-review dialog.
+- 228 Python regressions and real Qt source-selection probe PASS; Windows BMAX runtime deployment remains pending. [Detailed source evidence](docs/planning/V1.0-S5-CLUSTER-CORRECTIONS-2026-10-15.md).
+
 ### 2026-10-14 — Source-neutral 75% similar album context lookup and safe unknown-version upgrade
 
 - Register Picard 3 album/cluster context actions for all enabled authorized provider searches and rank selectable release suggestions with >=75% confidence and >=75% track coverage.

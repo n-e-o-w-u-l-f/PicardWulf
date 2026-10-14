@@ -46,6 +46,8 @@ Die Picard-3-Rechtsklickmenüs für **Albumgruppen links** und **Alben rechts** 
 
 Bei einem bisher nicht erkannten lokalen Pluginordner ist das sichere Upgrade explizit über **-LiveUpdate -AllowUnrecognizedExisting** möglich. Das Plugin muss vorher in Picard deaktiviert sein, die Installer-Bestätigungen sind separat, die Plugin-UUID wird geprüft und der gesamte alte Ordner als Rollback erhalten. Eine aktuelle **vollständige** Quellcode-ZIP ist erforderlich.
 
+**S5-Verbesserung:** Mehrere Songs mit derselben nachgewiesenen Anbieter-Release-ID werden nicht mehr durch fehlende optionale Albuminformationen getrennt. Widersprüchliche Editionsangaben verhindern weiterhin die Zusammenführung. Der Trackvergleich bleibt selbst bei 200 Songs auf linear begrenzte Editionsprüfungen beschränkt. Der gewählte Anbieter-Treffer wird in der nachfolgenden Detailprüfung automatisch vorausgewählt. [Prüfprotokoll](docs/planning/V1.0-S5-CLUSTER-CORRECTIONS-2026-10-15.md).
+
 ## Vollständiger Quellenvergleich beim Dateiimport
 
 Ein starker Cache-Treffer einer anderen Datei desselben Albums konnte weitere Provider-Abfragen vorzeitig überspringen. Die Korrektur prüft **jede aktivierte, berechtigte Quelle** für den aktuellen Track oder verwendet einen bereits erfolgreich abgeschlossenen Cache-/Checkpoint-Treffer **für dieselbe Anfrage**. Auch ein überzeugender MusicBrainz-Treffer sperrt Deezer, SoundCloud oder Last.fm nicht mehr aus. Anbieterquoten, fehlende API-Berechtigungen und eine bewusst gesetzte Pause gelten weiterhin. [Ursachenanalyse und Tests](docs/planning/V1.0-PROVIDER-COMPLETENESS-2026-10-14.md). BMAX wurde dabei nicht verändert.
