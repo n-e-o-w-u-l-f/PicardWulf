@@ -1,3 +1,9 @@
+<div align="center">
+
+[English](README.md) · [Deutsch](README.de.md) · [Русский](README.ru.md) · [Français](README.fr.md) · [Español](README.es.md) · [Italiano](README.it.md) · [Português (Brasil)](README.pt-BR.md) · [Polski](README.pl.md) · [Українська](README.uk.md) · [日本語](README.ja.md) · [简体中文](README.zh-CN.md)
+
+</div>
+
 # PicardWulf v1.0
 
 **Universal Metadata & native MusicBrainz release association for Picard 3.0**
@@ -60,7 +66,7 @@ free account creation or subscription purchase. Enabling the lookup hook means s
 fields such as artist and title are sent to the enabled providers. Creds are Windows
 DPAPI-encrypted in `%LOCALAPPDATA%\NEOWULF\Picard3\credentials.dpapi`.
 
-The shared results are **proposals**, not autonomous replacements for Picard metadata.
+The shared results are ranked without source priority. **The highest-confidence, unambiguous release wins automatically**, including a Deezer, Spotify, SoundCloud or other non-MusicBrainz source. PicardWulf writes the winner and its score into private Picard metadata. If conflicting releases or identifiers prevent a safe decision, PicardWulf leaves the file for manual review. This selection changes Picard metadata, not the on-disk audio file by default.
 SQLite persists cache (72 h) and outstanding jobs, including large folder queues.
 ISRC and MusicBrainz IDs are treated as exact identifiers; artist/title/duration/album
 conflicts reduce confidence or veto a match. Tags inferred from `Artist - Title.ext`
@@ -93,7 +99,7 @@ and refuses the operation if backup integrity or disk space fails. After that, t
 normal `file.update()` and `file.save()` API performs **asynchronous native Picard saving**.
 The status in Picard must confirm its eventual success. Picard preferences for file
 renaming or moving **may also apply** when saving; check your active naming script first.
-No silent batch overwrite is enabled.
+Automatic media overwrite is OFF by default; an explicitly enabled auto-save mode can write a verified high-confidence winner after backup.
 
 **Tag mapping:** artist/title/album and a valid ISRC may be suggested. Only MusicBrainz
 candidates may write `musicbrainz_albumid` and `musicbrainz_recordingid`; albumartist
@@ -108,9 +114,21 @@ Compilation alone does not imply Various Artists. MusicBrainz Release Group
 `77c24600-5610-473b-876e-09d8a42296b7` is recognized as **Eminem – Curtain Call 2**.
 Apple Music remains provider provenance, never albumartist.
 
+## Automatic multi-source release selection
+
+After **Add Folder**, PicardWulf searches the enabled providers asynchronously and compares release candidates using a **source-neutral score**: track title, artist, album, album artist, duration, ISRC and compatible MusicBrainz recording ID. Independent provider agreement counts only for the **same named release**, not unrelated compilations or editions. Different known provider album IDs and MusicBrainz release IDs remain distinct.
+
+A winner normally requires at least **93.5%** confidence and a meaningful margin over a different release; questionable filename-derived guesses, artist conflicts and ambiguous editions are left for review. The candidate's actual provider appears as `~picardwulf_source` and the score as `~picardwulf_score` in Picard's private metadata.
+
+- **Tools → PicardWulf → Automatische Release-Auswahl ein-/ausschalten**: on by default for metadata inside Picard.
+- **Tools → PicardWulf → Automatisches Tag-Speichern mit Backup ein-/ausschalten**: **OFF by default**. Explicitly enabling it allows unattended writes for unambiguous matches, with a full verified backup of each audio file before Picard's asynchronous save. Always test on copies first.
+- **Tools → NEOWULF → Gesammelte Treffer ansehen (alle Quellen)** shows the ranked candidate list and source. The release review dialog likewise displays provider-specific album IDs.
+
+If Picard's native MusicBrainz lookup updates metadata while multi-provider searches are running, PicardWulf compares against the original file tags and may replace the temporary MusicBrainz choice with a better-scoring permitted provider. It never invents a MusicBrainz release ID for that provider. The external release appears in the PicardWulf review and file tags, **not as a counterfeit album in Picard's native release pane**.
+
 ## Important boundaries and limitations
 
-- The combined provider candidates are displayed in **PicardWulf's own review UI**.
+- The combined provider candidates are displayed in **PicardWulf's own review UI**, and a reliable best release can automatically update Picard file metadata.
   Only **authentic MusicBrainz release entities** are loaded in Picard's native album pane.
   External catalogues cannot be injected as counterfeit MusicBrainz releases.
 - Unrecognized plugins/active-profile overrides and extra API sources require separate

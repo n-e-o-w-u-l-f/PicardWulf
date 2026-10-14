@@ -26,13 +26,15 @@ def credit(value):
     return one(value)
 
 
-def item(source, title, artist, album='', duration=0, isrc='', mbid='', url='', albumartist='', release_mbid=''):
+def item(source, title, artist, album='', duration=0, isrc='', mbid='', url='', albumartist='', release_mbid='', provider_album_id='', release_url='', release_date=''):
     try: duration = max(0, min(10_000_000, int(float(duration or 0))))
     except (TypeError, ValueError): duration = 0
     return {'source': source, 'title': one(title)[:300], 'artist': one(artist)[:300],
             'album': one(album)[:300], 'albumartist': one(albumartist)[:300],
             'duration_ms': duration, 'isrc': one(isrc).upper()[:14],
-            'recording_mbid': one(mbid)[:40], 'release_mbid': one(release_mbid)[:40], 'url': one(url)[:800]}
+            'recording_mbid': one(mbid)[:40], 'release_mbid': one(release_mbid)[:40], 'url': one(url)[:800],
+            'provider_album_id':one(provider_album_id)[:110],
+            'release_url':one(release_url)[:800], 'release_date':one(release_date)[:40]}
 
 
 def musicbrainz(q, request, credentials):
@@ -88,7 +90,10 @@ def deezer(q, request, credentials):
                       {'q': f'{q["artist"]} {q["title"]}', 'limit': 6})
     return [item('deezer', e.get('title'), (e.get('artist') or {}).get('name'),
                  (e.get('album') or {}).get('title'), 1000 * (e.get('duration') or 0),
-                 e.get('isrc'), url=e.get('link', '')) for e in payload.get('data', [])[:6]]
+                 e.get('isrc'), url=e.get('link', ''),
+                 provider_album_id=(e.get('album') or {}).get('id',''),
+                 release_url=(e.get('album') or {}).get('tracklist',''))
+            for e in payload.get('data', [])[:6]]
 
 
 def itunes(q, request, credentials):
@@ -97,7 +102,10 @@ def itunes(q, request, credentials):
                        'media': 'music', 'entity': 'song', 'limit': 6})
     return [item('itunes',e.get('trackName'),e.get('artistName'),e.get('collectionName'),
                  e.get('trackTimeMillis'),url=e.get('trackViewUrl', ''),
-                 albumartist=e.get('collectionArtistName', '')) for e in payload.get('results', [])[:6]]
+                 albumartist=e.get('collectionArtistName', ''),
+                 provider_album_id=e.get('collectionId',''),
+                 release_url=e.get('collectionViewUrl',''),release_date=e.get('releaseDate',''))
+            for e in payload.get('results', [])[:6]]
 
 
 def spotify(q, request, credentials):
@@ -126,7 +134,11 @@ def spotify(q, request, credentials):
     return [item('spotify',e.get('name'), ', '.join(a.get('name','') for a in e.get('artists',[])),
                  (e.get('album') or {}).get('name'), e.get('duration_ms'),
                  (e.get('external_ids') or {}).get('isrc'),
-                 url=(e.get('external_urls') or {}).get('spotify', ''))
+                 url=(e.get('external_urls') or {}).get('spotify', ''),
+                 albumartist=', '.join(a.get('name','') for a in (e.get('album') or {}).get('artists',[])),
+                 provider_album_id=(e.get('album') or {}).get('id',''),
+                 release_url=((e.get('album') or {}).get('external_urls') or {}).get('spotify',''),
+                 release_date=(e.get('album') or {}).get('release_date',''))
             for e in (payload.get('tracks') or {}).get('items',[])[:6]]
 
 
@@ -139,8 +151,14 @@ def soundcloud(q,request,credentials):
     if isinstance(payload,list): data=payload
     else: data=payload.get('collection', payload.get('data', []))
     if not isinstance(data,list): return []
-    return [item('soundcloud',e.get('title'), (e.get('user') or {}).get('username'),
-                 '', e.get('duration'),url=e.get('permalink_url','')) for e in data[:6]]
+    return [item('soundcloud',e.get('title'),
+                 (e.get('publisher_metadata') or {}).get('artist')
+                 or (e.get('user') or {}).get('username'),
+                 (e.get('publisher_metadata') or {}).get('album_title',''),
+                 e.get('duration'),(e.get('publisher_metadata') or {}).get('isrc',''),
+                 url=e.get('permalink_url',''),
+                 provider_album_id=(e.get('publisher_metadata') or {}).get('album_id',''))
+            for e in data[:6]]
 
 
 def lastfm(q,request,credentials):
@@ -151,8 +169,27 @@ def lastfm(q,request,credentials):
                        'api_key':key, 'format':'json', 'limit':6})
     data = ((payload.get('results') or {}).get('trackmatches') or {}).get('track',[])
     if isinstance(data,dict): data=[data]
-    return [item('lastfm',e.get('name'),e.get('artist'),mbid=e.get('mbid'),url=e.get('url',''))
-            for e in data[:6]]
+    found=[]
+    for index,e in enumerate(data[:6]):
+        candidate=item('lastfm',e.get('name'),e.get('artist'),
+                       mbid=e.get('mbid'),url=e.get('url',''))
+        # track.search omits album. A bounded official track.getInfo
+        # lookup enriches album identity, making Last.fm release-comparable.
+        if index < 2 and candidate['artist'] and candidate['title']:
+            try:
+                details=request('lastfm','https://ws.audioscrobbler.com/2.0/',
+                    {'method':'track.getInfo','artist':candidate['artist'],
+                     'track':candidate['title'],'api_key':key,'format':'json'})
+                album=(details.get('track') or {}).get('album') or {}
+                if isinstance(album,dict):
+                    candidate['album']=one(album.get('title'))[:300]
+                    candidate['albumartist']=one(album.get('artist'))[:300]
+                    candidate['provider_album_id']=one(album.get('mbid'))[:110]
+                    candidate['release_url']=one(album.get('url'))[:800]
+            except Exception:
+                pass  # Keep usable search results when enrichment is unavailable.
+        found.append(candidate)
+    return found
 
 ADAPTERS = {
     'musicbrainz':musicbrainz, 'deezer':deezer, 'itunes':itunes,

@@ -12,6 +12,7 @@ from picard.plugin3.api import BaseAction
 from picard.script import ScriptParser
 
 from .universal_engine import UniversalAggregator
+from .auto_apply import AutoApplyController
 from .native_ui import show_native_window
 from .credentials import load as load_credentials, save as save_credentials, FIELDS
 from .repair_logic import (
@@ -149,6 +150,7 @@ def _album_guard(api, album, metadata, release_node):
 
 
 _aggregator = None
+_controller = None
 
 
 def _get_engine():
@@ -177,12 +179,31 @@ def _file_snapshot(file):
     return data
 
 
+
+def _original_file_snapshot(file):
+    """Match from original disk tags, not transient MusicBrainz UI replacements."""
+    orig=getattr(file,'orig_metadata',None)
+    if orig is not None:
+        get=getattr(orig,'get',None)
+        if get is not None and get('title','') and get('artist',''):
+            # Reuse the same bounded snapshot logic, only substitute the
+            # metadata owner; never change the Picard file itself.
+            class _Original:
+                metadata=orig
+                filename=getattr(file,'filename','')
+            return _file_snapshot(_Original())
+    return _file_snapshot(file)
+
+
 def _file_loaded(api, file):
     """Picard hook: snapshot then queue; never block GUI on network."""
     if _aggregator is None:return
-    md=_file_snapshot(file)
+    md=_original_file_snapshot(file)
     if md is not None:
-        try:_aggregator.schedule(md)
+        try:
+            if _controller is not None:
+                _controller.watch(file,md)
+            _aggregator.schedule(md)
         except Exception as exc:
             api.logger.warning('Universal file load scheduling failed: %s', type(exc).__name__)
 
@@ -307,7 +328,7 @@ class ResultsAction(BaseAction):
                 idx=table.rowCount();table.insertRow(idx)
                 values=(q['artist']+' – '+q['title'],candidate.get('source','(keine Treffer)'),
                         candidate.get('title',''),candidate.get('artist',''),candidate.get('album',''),
-                        str(round(100*candidate.get('score',0),1))+'%' if candidate else '',
+                        str(round(100*candidate.get('release_score',candidate.get('score',0)),1))+'%' if candidate else '',
                         result.get('verdict',''),candidate.get('isrc',''),status,
                         candidate.get('url',''))
                 for i,v in enumerate(values):table.setItem(idx,i,QTableWidgetItem(str(v)))
@@ -361,8 +382,53 @@ class SelectedFileReview(BaseAction):
         show_native_window(self.api, eng, files, _file_snapshot)
 
 
+
+class AutoApplyToggle(BaseAction):
+    TITLE = 'Automatische Release-Auswahl ein-/ausschalten'
+    MENU = ('PicardWulf',)
+
+    def callback(self, objs):
+        enabled=bool(self.api.plugin_config.get('auto_apply_best',True))
+        new=not enabled
+        message=('Auto-Auswahl aus allen Metadatenquellen für neu geladene Dateien '
+                 + ('einschalten' if new else 'ausschalten') + '?\n\n'
+                 'Picard-Metadaten werden nur bei eindeutigem Gewinner aktualisiert. '
+                 'Audiodateien werden ohne separat aktiviertes Auto-Speichern nicht geschrieben.')
+        if QMessageBox.question(None,'PicardWulf – Auto-Auswahl',message,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
+            self.api.plugin_config['auto_apply_best']=new
+            _show('PicardWulf', 'Automatische Metadatenübernahme: '+
+                  ('EIN (Speichern separat)' if new else 'AUS'))
+
+
+class AutoSaveToggle(BaseAction):
+    TITLE = 'Automatisches Tag-Speichern mit Backup ein-/ausschalten'
+    MENU = ('PicardWulf',)
+
+    def callback(self, objs):
+        enabled=bool(self.api.plugin_config.get('auto_save_with_backup',False))
+        if enabled:
+            self.api.plugin_config['auto_save_with_backup']=False
+            _show('PicardWulf', 'Automatisches Speichern: AUS. Auto-Auswahl bleibt aktiv.')
+            return
+        notice=('Automatisches SPEICHERN von Musikdateien aktivieren?\n\n'
+                'Nur der eindeutige höchstbewertete Release-Treffer wird ausgewählt. '
+                'Vor jedem Speichern wird die vollständige Original-Audiodatei '
+                'separat gesichert und per SHA-256 geprüft. Picard kann dabei '
+                'entsprechend den Einstellungen Dateien umbenennen/verschieben.\n\n'
+                'Fehlerhafte API-Zuordnung kann trotzdem falsche Tags erzeugen. '
+                'Zuerst mit einer KOPIE testen. Die Änderung gilt ab der nächsten '
+                'automatischen Übernahme.')
+        if QMessageBox.question(None,'PicardWulf – automatisches Schreiben',notice,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
+            self.api.plugin_config['auto_save_with_backup']=True
+            _show('PicardWulf', 'Auto-Speichern mit Backup aktiviert. '
+                  'Asynchrone Speichervorgänge und mögliche Umbenennungen in Picard prüfen.')
+
 def enable(api):
-    global _aggregator
+    global _aggregator, _controller
     api.register_tools_menu_action(Inspect)
     api.register_tools_menu_action(Repair)
     api.register_album_metadata_processor(_album_guard, priority=-1000)
@@ -372,6 +438,13 @@ def enable(api):
         _aggregator = None
         api.logger.error('Universal aggregator initialization failed: %s', type(exc).__name__)
         return
+    api.plugin_config.register_option('auto_apply_best', True)
+    api.plugin_config.register_option('auto_save_with_backup', False)
+    try:
+        _controller = AutoApplyController(api, _aggregator, _file_snapshot)
+    except Exception as exc:
+        _controller = None
+        api.logger.error('Automatic matching initialization failed: %s',type(exc).__name__)
     api.register_file_post_load_processor(_file_loaded)
     api.register_track_metadata_processor(_track_loaded, priority=-1000)
     api.register_tools_menu_action(SourceStatus)
@@ -380,9 +453,14 @@ def enable(api):
     api.register_tools_menu_action(RefreshAction)
     api.register_tools_menu_action(NativeReview)
     api.register_file_action(SelectedFileReview)
+    api.register_tools_menu_action(AutoApplyToggle)
+    api.register_tools_menu_action(AutoSaveToggle)
 
 
 def disable():
-    global _aggregator
+    global _aggregator, _controller
+    if _controller is not None:
+        _controller.stop()
+    _controller=None
     if _aggregator is not None:_aggregator.stop()
     _aggregator=None

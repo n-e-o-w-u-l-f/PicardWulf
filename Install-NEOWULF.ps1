@@ -21,7 +21,7 @@ if (Get-Process -Name 'picard' -ErrorAction SilentlyContinue) {
     Stop-Install 'Picard ist noch geoeffnet. Picard normal beenden und CMD erneut starten.'
 }
 $source = Join-Path $PSScriptRoot 'neowulf_picard_repair'
-$required = @('__init__.py', 'MANIFEST.toml', 'repair_logic.py', 'universal_engine.py', 'universal_adapters.py', 'credentials.py', 'native_workflow.py', 'native_ui.py')
+$required = @('__init__.py', 'MANIFEST.toml', 'repair_logic.py', 'universal_engine.py', 'universal_adapters.py', 'credentials.py', 'native_workflow.py', 'native_ui.py', 'auto_selection.py', 'auto_apply.py')
 foreach ($item in $required) {
     if (!(Test-Path -LiteralPath (Join-Path $source $item) -PathType Leaf)) {
         Stop-Install "Paket unvollstaendig: $item"
@@ -76,27 +76,39 @@ $v3Hashes = @{
     'universal_adapters.py' = '0BD4C0FA9161A1F2F2EB37243BA6818A239567674206A06FEACA5984553784A9'
     'universal_engine.py' = 'C745F7A666485187F09D36B55F13F6570141DBFB42DEBBBB2B0447E9EF45374B'
 }
-function Matches-Known-V3([string]$path) {
-    foreach ($rel in $v3Hashes.Keys) {
+$v1Hashes = @{
+    '__init__.py' = 'AD3C735098D781C1F1ECD7FC76FFBEC38390F89CEFF34E8AD7034E36A138B62A'
+    'MANIFEST.toml' = 'B490B676327911A4F9E0D7673DB75E10DAA5400CB1971CBEC84055FDD9C2BE04'
+    'repair_logic.py' = 'F8AFA38CA6A176166FAEFBE73808934B406BCC89D66C0DB16839E2CF1DD6EAB5'
+    'universal_engine.py' = '028825F876266ED30818CF9D843FCB89C79898BFFF41A299952E5BEB9DCA03FF'
+    'universal_adapters.py' = 'C723D2A7359F38BCCBF7D9E8005DAB4ED02D16CA699E21FF9D92007EC10FD1D0'
+    'credentials.py' = '468B018E4EFFE743F11F89EA45A98F3E12F6D231E91EBE4E4175B16D7C849301'
+    'native_workflow.py' = 'E7B917AB5CA898965626B3C282803AACF2C5B55EEF73567238B90B3796C6628'
+    'native_ui.py' = '33F6E1E64E530EEBD4A9A920111189A9B4C6B3948FDF5DBBBF0238F6BB14FA02'
+}
+function Matches-Pinned-Source([string]$path, [hashtable]$pinned) {
+    foreach ($rel in $pinned.Keys) {
         $file = Join-Path $path $rel
         if (!(Test-Path -LiteralPath $file -PathType Leaf)) { return $false }
-        if ((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ne $v3Hashes[$rel]) { return $false }
+        if ((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ne $pinned[$rel]) { return $false }
     }
-    # Unknown extra source files must be protected against replacement.
+    # Do not silently discard unrecognized user-maintained source files.
     $sourceNames = @(Get-ChildItem -LiteralPath $path -File | ForEach-Object { $_.Name })
     foreach ($name in $sourceNames) {
-        if (-not $v3Hashes.ContainsKey($name)) { return $false }
+        if (-not $pinned.ContainsKey($name)) { return $false }
     }
     return $true
+}
+function Matches-Known-V3([string]$path) {
+    return Matches-Pinned-Source $path $v3Hashes
 }
 function Matches-Known-V2([string]$path) {
-    foreach ($rel in @('__init__.py', 'MANIFEST.toml', 'repair_logic.py')) {
-        $file = Join-Path $path $rel
-        if (!(Test-Path -LiteralPath $file -PathType Leaf)) { return $false }
-        if ((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ne $v2Hashes[$rel]) { return $false }
-    }
-    return $true
+    return Matches-Pinned-Source $path $v2Hashes
 }
+function Matches-Known-V1([string]$path) {
+    return Matches-Pinned-Source $path $v1Hashes
+}
+
 $mode = 'install'
 if (Test-Path -LiteralPath $target) {
     if (!(Test-Path -LiteralPath $target -PathType Container)) {
@@ -104,6 +116,7 @@ if (Test-Path -LiteralPath $target) {
     }
     if (Files-Match $source $target) { $mode = 'already_current' }
     elseif (Matches-Known-V3 $target) { $mode = 'upgrade_v3' }
+    elseif (Matches-Known-V1 $target) { $mode = 'upgrade_v1' }
     elseif (Matches-Known-V2 $target) { $mode = 'upgrade_v2' }
     else { Stop-Install "Pluginordner hat unbekannte lokale Aenderungen; sicherheitshalber NICHT ueberschrieben: $target" }
 }
@@ -117,7 +130,7 @@ if ($mode -eq 'already_current') {
     try {
         Copy-Item -LiteralPath $source -Destination $stage -Recurse -ErrorAction Stop
         if (!(Files-Match $source $stage)) { throw 'Integritaetspruefung fehlgeschlagen.' }
-        if ($mode -in @('upgrade_v2', 'upgrade_v3')) {
+        if ($mode -in @('upgrade_v2', 'upgrade_v3', 'upgrade_v1')) {
             # Picard ignores dot-prefixed directories; leave the full previous
             # release as a retained rollback point, never delete it.
             $backup = Join-Path $pluginRoot ('.picardwulf-backup-' + $mode + '-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N'))
@@ -152,7 +165,9 @@ Write-Host 'Picard-CLI-Abhaengigkeit entfernt; keine Verwendung von picard-cli.e
 Write-Host 'Kein Eingriff in Picard.ini und keine Veraenderung von Musikdateien.'
 Write-Host 'Picard 3 entdeckt das Plugin beim Start automatisch.'
 Write-Host 'Nach dem Start: Optionen > Plugins > PicardWulf v1.0 > Aktivieren (falls noch nicht aktiv).'  -ForegroundColor Yellow
-Write-Host 'Ordner hinzufuegen startet die Multi-Source-Suche. Native Release-Zuordnung/Tags: Werkzeuge > PicardWulf.' -ForegroundColor Yellow
+Write-Host 'Ordner hinzufuegen: bestes Release aus ALLEN Quellen wird bei sicherem Treffer automatisch in Picard angezeigt.' -ForegroundColor Yellow
+Write-Host 'Automatisches Schreiben von Audiodateien ist standardmaessig AUS; separat mit Backup aktivierbar.' -ForegroundColor Yellow
+Write-Host 'Native Release-Zuordnung/Tags: Werkzeuge > PicardWulf.' -ForegroundColor Yellow
 Write-Host 'VA-Reparatur bleibt separat: Werkzeuge > NEOWULF > VA-Sortierung reparieren.' -ForegroundColor Yellow
 Write-Host ''
 try {

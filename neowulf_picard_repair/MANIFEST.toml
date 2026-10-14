@@ -1,13 +1,16 @@
 uuid = "cf3c909b-eccb-4b89-90e3-55eb68e0176c"
 name = "PicardWulf v1.0 – Universal Metadata & Native Matching"
-description = "Unified six-source search, native MusicBrainz album matching, consent-based tag overwrite with verified backup, NEOWULF naming guard"
+description = "Source-neutral release scoring across six providers, automatic safe tag previews, native MusicBrainz matching, optional backed-up writes and NEOWULF naming"
 long_description = """
 Repairs a precisely identified NEOWULF naming script in place, preserving all
 other scripts and creating a local full Picard.ini backup before changing
 anything. Fixes a compilation/Various Artists misclassification.
 Adds an MBID-specific album-artist guard for Eminem Curtain Call 2.
 Automatically searches permitted metadata providers after loading local audio files
-and after MusicBrainz track updates. The selected file can be linked to a real MusicBrainz release in Picard's album window.
+and after MusicBrainz track updates. Chooses the highest-scoring unambiguous
+release from ANY provider, never blindly favoring MusicBrainz. Updates Picard
+in-memory metadata by default and marks provenance; unattended writes require
+separate opt-in and complete SHA-256-verified audio backups. The selected file can be linked to a real MusicBrainz release in Picard's album window.
 Optional tag overwrites require user review, explicit confirmation and a
 verified full-media backup before Picard starts its asynchronous save.
 No audio files are moved or rewritten by the repair action.

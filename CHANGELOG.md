@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.0 source-ranking update — 2026-10-14 (runtime candidate)
+
+- Added automatic best-release selection after Add Folder: MusicBrainz has no built-in ranking priority.
+- Source-neutral matching compares artist/title/album/album artist/duration, exact ISRC/MBID conflicts and release-specific corroboration.
+- Added high-confidence auto-apply in Picard metadata, protected against ambiguous editions and concurrent native MusicBrainz assignment.
+- Added optional explicitly enabled automatic audio-tag saving; every save requires a verified complete media backup first. It is OFF by default.
+- Added Deezer, Spotify, Apple catalogue release identifiers and bounded Last.fm album enrichment.
+- Exposed winning source/score/album, fixed result table clearing on periodic refresh, and kept native Picard album matching restricted to real MBIDs.
+- Installer now includes two new modules and recognizes unmodified v1.0, v2 and v3 predecessors with pinned hashes; no force-upgrade of unknown edits.
+- Added 11 cross-linked READMEs (English, German, Russian, French, Spanish, Italian, Portuguese-BR, Polish, Ukrainian, Japanese, Simplified Chinese).
+- Local tests expanded to 110; BMAX Windows runtime, live provider responses and asynchronous tag writing remain NOT VERIFIED.
+
 ## 1.0.0 — 2026-10-14 (candidate; BMAX runtime gate pending)
 
 - Added Picard-native MusicBrainz release/recording linking from shared candidate review.

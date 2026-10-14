@@ -14,7 +14,11 @@ Updated: 2026-10-14 · Project: `n-e-o-w-u-l-f/PicardWulf`
 
 - Picard 3.0 plugin API and user plugin directory, without the broken frozen `picard-cli.exe`.
 - Multi-source adapters: MusicBrainz, Deezer, Apple/iTunes catalogue; optional authenticated Spotify, SoundCloud, Last.fm.
-- Automatic file-load and metadata-update background search, SQLite persistent queue/cache, per-source quota and candidate scoring.
+- Automatic file-load and metadata-update background search, SQLite persistent queue/cache, per-source quota, and source-neutral release ranking.
+- Automatic Picard in-memory metadata takeover for a uniquely highest-scoring release from **any** configured provider (not a MusicBrainz priority); configurable via PicardWulf Tools.
+- Automatic audio-file saving is OFF by default and requires an explicit user opt-in, full-media backup and asynchronous save readback.
+- Release-specific provider album IDs, edition ambiguity guard, file-original metadata baseline, native MusicBrainz race handling, and provider attribution as private Picard metadata.
+- 11 translated README pages with 121 mutually linked header entries.
 - Picard native release/recording association only for authentic MusicBrainz IDs.
 - Consent-gated tag changes with diff preview and hash-checked full audio backup.
 - NEOWULF script repair; distinguish compilations from Various Artists; Eminem *Curtain Call 2* must remain Eminem.
@@ -22,12 +26,14 @@ Updated: 2026-10-14 · Project: `n-e-o-w-u-l-f/PicardWulf`
 
 ## Validation
 
-- **PASS**: 90 Python unit/contract tests on Legion using self-contained packaged sources (`python3 -m unittest discover -s tests -q`), 2026-10-14.
+- **PASS**: 115 Python unit/contract tests on Legion using self-contained packaged sources (`python3 -m unittest discover -s tests -q`), 2026-10-14.
 - **PASS**: `git diff --check` before push; GitHub code, README and file tree read back; fast-forward push succeeded.
 - **PENDING**: actual installer/plugin activation on Windows BMAX-B6 as `megal`; the release is a candidate, not a production-verified binary.
 - **PENDING**: live credentials/API responses, rate limits and terms for individual providers.
 - **PENDING**: interactive Picard 3 native release selection, asynchronous tag saving, file moves/renames, recovery from backup on actual media.
-- **PENDING**: automated multi-source candidate selection integrated deeper into native Picard release suggestion UX; current source uses explicit candidate review and authentic MBIDs.
+- **IMPLEMENTED (source)**: automatic best-source candidate ranking and Picard-file metadata takeover; no counterfeit external release in native MusicBrainz album pane.
+- **PENDING**: BMAX runtime confirmation that Picard's automatic MusicBrainz lookup does not replace source-selected metadata after background completion; ensure no stale-MBID regressions.
+- **PENDING**: direct external catalogue album representation in native Picard release pane would require additional compatibility work or a Picard core feature; currently visible in PicardWulf review only.
 
 ## Next safe actions
 

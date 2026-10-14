@@ -61,9 +61,15 @@ class Config:
 class Logger:
     def error(self,*args): pass
     def info(self,*args): pass
+class PluginConfig(dict):
+    def register_option(self,key,default):
+        self.setdefault(key,default)
+
 class Api:
     def __init__(self):
         self.global_config=Config()
+        self.plugin_config=PluginConfig()
+        self.tagger=object()
         self.logger=Logger()
         self.registered=[]
     def register_tools_menu_action(self,cls):self.registered.append(('tools',cls))
@@ -80,8 +86,11 @@ class TestContract(unittest.TestCase):
     def test_enable_registers_no_mutations(self):
         api=Api()
         before=api.global_config.setting['file_renaming_scripts']['a']['script']
-        plugin.enable(api)
-        self.assertEqual(len(api.registered),11)
+        with patch.object(plugin,'AutoApplyController'):
+            plugin.enable(api)
+        self.assertEqual(len(api.registered),13)
+        self.assertTrue(api.plugin_config['auto_apply_best'])
+        self.assertFalse(api.plugin_config['auto_save_with_backup'])
         self.assertEqual(api.global_config.setting['file_renaming_scripts']['a']['script'],before)
     def test_repair_declined_changes_nothing(self):
         api=Api();act=plugin.Repair();act.api=api

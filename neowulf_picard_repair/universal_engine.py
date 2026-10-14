@@ -70,7 +70,7 @@ def clean_track(metadata):
 
 
 def query_key(q):
-    s='|'.join(norm(q.get(k,'')) for k in ('title','artist','album','isrc','recording_mbid'))
+    s='picardwulf-crosssource-v1|'+ '|'.join(norm(q.get(k,'')) for k in ('title','artist','album','isrc','recording_mbid'))
     return hashlib.sha256(s.encode('utf-8')).hexdigest()
 
 
@@ -104,35 +104,19 @@ def score(q,c):
     return (round(min(1.,v),4),'compatible')
 
 
-def aggregate(q,results):
-    rows=[]
-    for source, candidates in results.items():
-        for candidate in candidates:
-            quality, reason = score(q,candidate)
-            row={**candidate, 'score':quality,'reason':reason}
-            rows.append(row)
-    # No consensus without compatible artist+title. Group independent sources
-    # by recording identity (ISRC if both exist; else artist+title).
-    matches=[x for x in rows if x['score']>=.70]
-    groups=defaultdict(list)
-    for x in matches:
-        identity=(norm(x['artist']),norm(x['title']))
-        # Same song often appears on several albums; don't merge release names
-        # into any authoritative release/album-artist prediction.
-        groups[identity].append(x)
-    for group in groups.values():
-        count=len(set(x['source'] for x in group))
-        for x in group:x['source_support']=count
-    rows.sort(key=lambda x:(x['score'],x.get('source_support',1)),reverse=True)
-    winners=[r for r in rows if r['score']>=.84]
-    if not winners:
-        verdict='no_safe_match'
-    elif (winners[0]['score']>=.90 and winners[0].get('source_support',1)>=2):
-        verdict='review_high_confidence'
+def aggregate(q, results):
+    """Rank releases across ALL sources without granting MusicBrainz priority."""
+    from .auto_selection import rank_candidates, decide_auto
+
+    rows = rank_candidates(q, results)
+    decision = decide_auto(q, rows)
+    if not any(x['score'] >= .84 for x in rows):
+        verdict = 'no_safe_match'
+    elif decision['state'] == 'ready':
+        verdict = 'review_high_confidence'
     else:
-        verdict='review'
-    # Never claim automatic tagging or album release matching.
-    return {'verdict':verdict,'candidates':rows[:40]}
+        verdict = 'review'
+    return {'verdict': verdict, 'candidates': rows[:40], 'auto': decision}
 
 
 class HTTPClient:

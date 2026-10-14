@@ -36,7 +36,7 @@ def show_native_window(api, aggregator, files, snapshot_func):
     layout.addWidget(chooser)
     status = QLabel('', dlg)
     layout.addWidget(status)
-    cols = ['Quelle', 'Score', 'Titel', 'Interpret', 'Album', 'Albumartist', 'ISRC', 'MB Release-ID']
+    cols = ['Quelle', 'Score', 'Titel', 'Interpret', 'Album', 'Albumartist', 'ISRC', 'MB Release-ID', 'Anbieter-Release-ID']
     table = QTableWidget(0, len(cols), dlg)
     table.setHorizontalHeaderLabels(cols)
     table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -72,34 +72,41 @@ def show_native_window(api, aggregator, files, snapshot_func):
 
     def update_view():
         nonlocal available
-        available=[]
-        table.setRowCount(0)
         f=current_file()
         md=snapshot_func(f) if f else None
         q=clean_track(md) if md is not None else None
         if not q:
+            available=[]
+            table.setRowCount(0)
             status.setText('Keine auswertbaren Metadaten. Eindeutiger Dateiname »Künstler - Titel« wird unterstützt.')
             return
         data=aggregator.store.get_result(query_key(q))
         signature=(chooser.currentIndex(),data['updated'] if data else None)
         if last_view_signature[0]==signature:return
         last_view_signature[0]=signature
+        available=[]
+        table.setRowCount(0)
         if not data:
             aggregator.schedule(md)
             status.setText('Suche läuft im Hintergrund. Ergebnisse werden automatisch aktualisiert.')
             return
         payload=data['payload']
-        available=[v for v in payload.get('candidates',[]) if v.get('score',0)>0]
+        available=[v for v in payload.get('candidates',[]) if v.get('release_score',v.get('score',0))>0]
         table.setRowCount(len(available))
         for j,c in enumerate(available):
-            vals=(c.get('source',''),f'{100*c.get("score",0):.1f}%',c.get('title',''),
+            vals=(c.get('source',''),f'{100*c.get("release_score",c.get("score",0)):.1f}%',c.get('title',''),
                   c.get('artist',''),c.get('album',''),c.get('albumartist',''),
-                  c.get('isrc',''),c.get('release_mbid',''))
+                  c.get('isrc',''),c.get('release_mbid',''),c.get('provider_album_id',''))
             for k,v in enumerate(vals):
                 table.setItem(j,k,QTableWidgetItem(str(v)))
         table.resizeColumnsToContents()
         by_source=', '.join(f'{name}:{state}' for name,state in payload.get('status',{}).items())
-        status.setText(f'{len(available)} plausible Treffer · {payload.get("verdict", "offen")} · {by_source}')
+        auto=payload.get('auto') or {}
+        best=auto.get('candidate') or (available[0] if available else {})
+        best_summary=(f'Gewinner: {best.get("source","-")} / {best.get("album","-")} '
+                      f'({100*best.get("release_score",best.get("score",0)):.1f} %) · '
+                      f'Auto: {auto.get("state","offen")}')
+        status.setText(f'{best_summary} · {len(available)} Treffer · {by_source}')
 
     def warn(err):
         QMessageBox.warning(dlg,'PicardWulf – keine Änderung',str(err))
