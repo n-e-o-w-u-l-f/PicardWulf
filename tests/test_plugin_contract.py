@@ -76,6 +76,7 @@ class Api:
     def register_file_action(self,cls):self.registered.append(('file_action',cls))
     def register_album_metadata_processor(self,fn,priority):self.registered.append(('processor',fn,priority))
     def register_file_post_load_processor(self,fn,priority=0):self.registered.append(('file_event',fn,priority))
+    def register_file_post_save_processor(self,fn,priority=0):self.registered.append(('file_saved_event',fn,priority))
     def register_track_metadata_processor(self,fn,priority=0):self.registered.append(('track_event',fn,priority))
 class TestContract(unittest.TestCase):
     def tearDown(self):
@@ -88,10 +89,22 @@ class TestContract(unittest.TestCase):
         before=api.global_config.setting['file_renaming_scripts']['a']['script']
         with patch.object(plugin,'AutoApplyController'), patch.object(plugin,'UniversalAggregator'):
             plugin.enable(api)
-        self.assertEqual(len(api.registered),15)
+        self.assertEqual(len(api.registered),18)
+        self.assertEqual(sum(x[0]=='file_saved_event' for x in api.registered),1)
         self.assertTrue(api.plugin_config['auto_apply_best'])
         self.assertFalse(api.plugin_config['auto_save_with_backup'])
         self.assertEqual(api.global_config.setting['file_renaming_scripts']['a']['script'],before)
+    def test_picard_v3_post_save_hook_dispatches_to_tracker(self):
+        api=Api()
+        with patch.object(plugin,'AutoApplyController'), patch.object(plugin,'UniversalAggregator'):
+            plugin.enable(api)
+        events=[x for x in api.registered if x[0]=='file_saved_event']
+        self.assertEqual(len(events),1)
+        witness=object()
+        with patch.object(plugin._save_tracker,'post_save',return_value=True) as saved:
+            events[0][1](api,witness)
+        saved.assert_called_once_with(witness)
+
     def test_repair_declined_changes_nothing(self):
         api=Api();act=plugin.Repair();act.api=api
         before=api.global_config.setting['file_renaming_scripts']['a']['script']

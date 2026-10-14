@@ -13,7 +13,7 @@ from .universal_engine import clean_track, query_key
 from .universal_adapters import one
 
 
-def show_native_window(api, aggregator, files, snapshot_func):
+def show_native_window(api, aggregator, files, snapshot_func, save_tracker=None):
     from PyQt6.QtCore import QTimer
     from PyQt6.QtWidgets import (
         QAbstractItemView, QComboBox, QDialog, QHBoxLayout, QLabel, QMessageBox,
@@ -225,20 +225,28 @@ def show_native_window(api, aggregator, files, snapshot_func):
             if (f is None or str(f.filename)!=identity[0] or id(f)!=identity[1] or
                     json.dumps(dict(f.metadata),sort_keys=True)!=identity[2]):
                 raise UnsafeCandidate('Datei oder Vorschau inzwischen geändert; nichts gespeichert.')
+            from .save_tracking import check_backup_receipt
+            check_backup_receipt(receipt['value'],f.filename)
+            if save_tracker is None:
+                raise UnsafeCandidate('Nachprüfung via Picard-Post-Save-Hook nicht verfügbar.')
             old=Metadata()
             old.copy(f.metadata)
+            token=None
             try:
+                token=save_tracker.register(f,receipt['value'],proposal)
                 for field,value in proposal.items():f.metadata[field]=value
                 f.update()
                 f.save()
             except Exception:
+                if token is not None:save_tracker.abort(f,token)
                 f.metadata.copy(old)
                 f.update()
                 raise
             QMessageBox.information(dlg,'PicardWulf – Speicherung gestartet',
-                f'Backup verifiziert: {receipt["value"]["backup"]}\n\n'
-                'Picard hat die asynchrone Tag-Speicherung gestartet. Den endgültigen '
-                'Erfolg im Picard-Dateistatus prüfen. Das Backup bleibt erhalten.')
+                f'Backup: {receipt["value"]["backup"]}\n\n'
+                'Picard speichert asynchron. Erst der Post-Save-Hook und eine '
+                'separate Hintergrundprüfung dürfen einen Erfolg bestätigen. '
+                'Die Prüfung ist unter NEOWULF → Tag-Speicherstatus einsehbar.')
         except Exception as exc:warn(exc)
 
     chooser.currentIndexChanged.connect(update_view)

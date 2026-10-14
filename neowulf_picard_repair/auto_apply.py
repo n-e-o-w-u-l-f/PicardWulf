@@ -59,7 +59,7 @@ def proposal_for_auto(q, result):
     return candidate,proposal
 
 
-def apply_best_to_file(file, q, result, *, save=False, verified_backup=None):
+def apply_best_to_file(file, q, result, *, save=False, verified_backup=None, save_tracker=None):
     """Only call from the GUI thread. No write occurs until backup succeeds."""
     candidate,proposal=proposal_for_auto(q,result)
     md=getattr(file,'metadata',None)
@@ -86,8 +86,10 @@ def apply_best_to_file(file, q, result, *, save=False, verified_backup=None):
     if save and changes:
         if not getattr(file,'can_save',True) or not getattr(file,'can_edit_tags',True):
             raise UnsafeCandidate('Datei nicht beschreibbar.')
-        if not verified_backup or verified_backup.get('path') != file.filename:
-            raise UnsafeCandidate('Verifizierte Hintergrundsicherung fehlt.')
+        from .save_tracking import check_backup_receipt
+        check_backup_receipt(verified_backup,file.filename)
+        if save_tracker is None:
+            raise UnsafeCandidate('Picard Post-Save-Prüfung nicht verfügbar.')
         backup=verified_backup['backup']
     else:
         backup=None
@@ -95,6 +97,7 @@ def apply_best_to_file(file, q, result, *, save=False, verified_backup=None):
     from picard.plugin3.api import Metadata
     original=Metadata()
     original.copy(md)
+    save_token=None
     try:
         for key,value in proposal.items():
             md[key]=value
@@ -109,8 +112,11 @@ def apply_best_to_file(file, q, result, *, save=False, verified_backup=None):
         md['~picardwulf_release']=candidate['album']
         file.update()
         if backup is not None:
-            file.save()  # Picard asynchronous; success is NOT yet confirmed.
+            save_token=save_tracker.register(file,verified_backup,proposal)
+            file.save()  # Picard asynchronous; completion requires post-save event.
     except Exception:
+        if save_token is not None:
+            save_tracker.abort(file,save_token)
         md.copy(original)
         file.update()
         raise
@@ -122,7 +128,7 @@ def apply_best_to_file(file, q, result, *, save=False, verified_backup=None):
 class AutoApplyController:
     """One timer for all files, no threads touching mutable Picard objects."""
 
-    def __init__(self, api, engine, snapshot_func, ingest_snapshot_func=None):
+    def __init__(self, api, engine, snapshot_func, ingest_snapshot_func=None, save_tracker=None):
         from PyQt6.QtCore import QTimer
         self.api=api
         self.engine=engine
@@ -135,6 +141,7 @@ class AutoApplyController:
         self._refresh_iterator=None
         self._refresh_force=False
         self.io=create_gui_io(api.tagger, engine)
+        self.save_tracker=save_tracker
         self.stopped=False
         self.timer=QTimer(api.tagger)
         self.timer.setInterval(50)
@@ -283,7 +290,7 @@ class AutoApplyController:
         try:
             if 'error' in receipt:raise UnsafeCandidate('Hintergrundsicherung fehlgeschlagen.')
             apply_best_to_file(file,watch.query,result['payload'],save=True,
-                               verified_backup=receipt['value'])
+                               verified_backup=receipt['value'],save_tracker=self.save_tracker)
         except Exception as exc:
             self.api.logger.warning('PicardWulf backup/save: %s',type(exc).__name__)
         self.watches.pop(identity,None)

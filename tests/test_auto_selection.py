@@ -118,9 +118,20 @@ class TestAutomaticWriting(unittest.TestCase):
         events=[]
         events.append('backup')
         f.save=lambda:events.append('save')
+        class Tracker:
+            registered=False
+            def register(self,file,backup,expected):
+                self.registered=True
+                return 1
+            def abort(self,file,token):
+                raise AssertionError('must not abort successful save')
+        tracker=Tracker()
         with self.with_fake_api():
             result=auto.apply_best_to_file(f,Q,self.result(),save=True,
-                verified_backup={'path':f.filename,'backup':'saved-audio.flac'})
+                verified_backup={'path':f.filename,'backup':'saved-audio.flac',
+                                 'sha256':'a'*64,'size':1000,'mtime_ns':1},
+                save_tracker=tracker)
+        self.assertTrue(tracker.registered)
         self.assertEqual(events,['backup','save'])
         self.assertEqual(result['backup'],'saved-audio.flac')
 

@@ -4,6 +4,7 @@ Pure functions are usable in tests without loading Qt or touching Picard. A
 non-MusicBrainz provider is never treated as a MusicBrainz release authority.
 """
 import hashlib
+import json
 import os
 from pathlib import Path
 import re
@@ -185,8 +186,40 @@ def media_backup(path, backup_root=None):
 
 
 def backup_envelope(path):
-    """Worker-only receipt; no File/Qt references cross the thread boundary."""
-    target = media_backup(path)
-    stat = Path(path).stat()
-    return {'path': str(path), 'backup': str(target),
-            'size': stat.st_size, 'mtime_ns': stat.st_mtime_ns}
+    """Worker-only full-audio receipt, independently hash checked."""
+    source=Path(path)
+    before=source.stat()
+    target=media_backup(path)
+    # Re-read BOTH sides after the copy; a replace/mutation of the backup
+    # between media_backup() and manifest creation must not certify different
+    # audio bytes as a good backup. This happens on the worker only.
+    digest=hashlib.sha256()
+    original_digest=hashlib.sha256()
+    with target.open('rb') as handle:
+        for block in iter(lambda:handle.read(1024*1024),b''):
+            digest.update(block)
+    with source.open('rb') as handle:
+        for block in iter(lambda:handle.read(1024*1024),b''):
+            original_digest.update(block)
+    if digest.digest()!=original_digest.digest():
+        raise UnsafeCandidate('Sicherungsdatei und Original haben unterschiedliche Prüfsummen.')
+    after=source.stat()
+    if (before.st_dev,before.st_ino,before.st_size,before.st_mtime_ns)!=(
+            after.st_dev,after.st_ino,after.st_size,after.st_mtime_ns):
+        raise UnsafeCandidate('Original während der Hintergrundsicherung geändert.')
+    if target.stat().st_size!=before.st_size:
+        raise UnsafeCandidate('Backup-Größe während der Verifizierung verändert.')
+    receipt={'path': str(path), 'backup': str(target),
+             'size':before.st_size,'mtime_ns':before.st_mtime_ns,
+             'dev':before.st_dev,'inode':before.st_ino,
+             'sha256':digest.hexdigest(),'schema':1}
+    # Durable proof survives Picard crashes/reloads. The manifest is adjacent
+    # to the uniquely named, non-overwritten backup OUTSIDE the music folder.
+    # It contains paths and checksum only, never OAuth/API secrets or tags.
+    manifest=target.with_name(target.name+'.receipt.json')
+    with manifest.open('x',encoding='utf8') as f:
+        json.dump(receipt,f,ensure_ascii=False,sort_keys=True)
+        f.flush()
+        os.fsync(f.fileno())
+    receipt['manifest']=str(manifest)
+    return receipt

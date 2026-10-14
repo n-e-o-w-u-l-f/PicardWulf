@@ -13,6 +13,7 @@ from picard.script import ScriptParser
 
 from .universal_engine import UniversalAggregator
 from .auto_apply import AutoApplyController
+from .save_tracking import SaveTracker
 from .native_ui import show_native_window
 from .credentials import load as load_credentials, save as save_credentials, FIELDS
 from .repair_logic import (
@@ -151,6 +152,7 @@ def _album_guard(api, album, metadata, release_node):
 
 _aggregator = None
 _controller = None
+_save_tracker = None
 _retiring_engine = None
 
 
@@ -197,6 +199,13 @@ def _original_file_snapshot(file):
                 filename=getattr(file,'filename','')
             return _file_snapshot(_Original())
     return _file_snapshot(file)
+
+
+def _file_saved(api, file):
+    # Picard 3 invokes this ONLY after a file's save operation has completed.
+    # Disk tag verification runs on PicardWulf's dedicated worker, not here.
+    if _save_tracker is not None:
+        _save_tracker.post_save(file)
 
 
 def _file_loaded(api, file):
@@ -479,6 +488,61 @@ class RefreshAction(BaseAction):
                            'Später Werkzeuge → NEOWULF → Gesammelte Treffer ansehen öffnen.')
 
 
+class RestoreAudioCopy(BaseAction):
+    TITLE = 'Audio-Backup in NEUE Datei wiederherstellen'
+    MENU = ('NEOWULF',)
+
+    def callback(self, objs):
+        from PyQt6.QtWidgets import QFileDialog
+        if _save_tracker is None:
+            _show('PicardWulf','Wiederherstellungsdienst nicht verfügbar.','warning')
+            return
+        receipt,_=QFileDialog.getOpenFileName(
+            None,'PicardWulf – Sicherungsbeleg auswählen','',
+            'PicardWulf-Belege (*.receipt.json)')
+        if not receipt:return
+        destination,_=QFileDialog.getSaveFileName(
+            None,'PicardWulf – NEUEN Zieldateinamen auswählen','',
+            'Audiodateien (*.*)')
+        if not destination:return
+        if QMessageBox.question(None,'PicardWulf – Kopie wiederherstellen',
+            'Die Sicherung wird per SHA-256 geprüft und NUR als NEUE Datei '
+            'wiederhergestellt. Bestehende Audiodateien werden nicht überschrieben. '
+            'Ein Kopieren in den Musikordner kann Dubletten erzeugen.\n\n'
+            'Wiederherstellung im Hintergrund starten?',
+            QMessageBox.StandardButton.Yes|QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No)!=QMessageBox.StandardButton.Yes:return
+        try:
+            _save_tracker.request_restore(receipt,destination)
+        except Exception as exc:
+            _show('PicardWulf – Wiederherstellung nicht gestartet',str(exc),'warning')
+            return
+        _show('PicardWulf – Wiederherstellung beauftragt',
+              'Die neue Kopie wird im Hintergrund erstellt. Erst RESTORED_COPY '
+              'unter NEOWULF → Tag-Speicherstatus bestätigt den Erfolg.')
+
+
+class TagSaveStatus(BaseAction):
+    TITLE = 'Tag-Speicherstatus (Post-Save & Readback)'
+    MENU = ('NEOWULF',)
+
+    def callback(self, objs):
+        if _save_tracker is None:
+            _show('PicardWulf', 'Speichernachverfolgung ist nicht aktiv.', 'warning')
+            return
+        status=_save_tracker.status()
+        totals=', '.join(f'{entry["state"]}' for entry in status['recent'][-8:])
+        _show('PicardWulf – Tag-Speicherstatus',
+              f'Ausstehende Picard-Speicherungen: {status["pending"]}\n'
+              f'Laufende Dateiprüfungen: {status["verifying"]}\n'
+              f'Laufende Wiederherstellungen: {status["restoring"]}\n'
+              f'Letzte Prüfergebnisse: {totals or "keine"}\n\n'
+              'VERIFIED bedeutet Post-Save-Ereignis plus übereinstimmend '
+              'zurückgelesene Tags und intakte Sicherung. '
+              'UNVERIFIED oder MISMATCH bedeutet NICHT bestätigt. '
+              'Backups werden niemals automatisch überschrieben oder gelöscht.')
+
+
 class NativeReview(BaseAction):
     TITLE = 'Album-Matching & Tags überschreiben (mit Backup)'
     MENU = ('PicardWulf',)
@@ -486,7 +550,7 @@ class NativeReview(BaseAction):
     def callback(self, objs):
         eng = _get_engine()
         files=list(self.api.tagger.iter_all_files())
-        show_native_window(self.api, eng, files, _file_snapshot)
+        show_native_window(self.api, eng, files, _file_snapshot, _save_tracker)
 
 
 class SelectedFileReview(BaseAction):
@@ -495,7 +559,7 @@ class SelectedFileReview(BaseAction):
     def callback(self, objs):
         eng=_get_engine()
         files=[obj for obj in objs if getattr(obj,'metadata',None) is not None]
-        show_native_window(self.api, eng, files, _file_snapshot)
+        show_native_window(self.api, eng, files, _file_snapshot, _save_tracker)
 
 
 
@@ -544,7 +608,7 @@ class AutoSaveToggle(BaseAction):
                   'Asynchrone Speichervorgänge und mögliche Umbenennungen in Picard prüfen.')
 
 def enable(api):
-    global _aggregator, _controller
+    global _aggregator, _controller, _save_tracker
     api.register_tools_menu_action(Inspect)
     api.register_tools_menu_action(Repair)
     api.register_album_metadata_processor(_album_guard, priority=-1000)
@@ -565,9 +629,12 @@ def enable(api):
         _aggregator = None
         api.logger.error('Universal aggregator initialization failed: %s', type(exc).__name__)
         return
+    _save_tracker=SaveTracker()
+    api.register_file_post_save_processor(_file_saved)
     try:
         _controller = AutoApplyController(api, _aggregator, _file_snapshot,
-                                          ingest_snapshot_func=_original_file_snapshot)
+                                          ingest_snapshot_func=_original_file_snapshot,
+                                          save_tracker=_save_tracker)
         if hasattr(api.tagger,'iter_all_files'):
             # Reload recovery covers overflow identities still owned by Picard.
             # SQLite skips unchanged cached work; this never forces a rescan.
@@ -583,6 +650,8 @@ def enable(api):
     api.register_tools_menu_action(ResultsAction)
     api.register_tools_menu_action(RefreshAction)
     api.register_tools_menu_action(SearchPauseAction)
+    api.register_tools_menu_action(TagSaveStatus)
+    api.register_tools_menu_action(RestoreAudioCopy)
     api.register_tools_menu_action(NativeReview)
     api.register_file_action(SelectedFileReview)
     api.register_tools_menu_action(AutoApplyToggle)
@@ -590,10 +659,13 @@ def enable(api):
 
 
 def disable():
-    global _aggregator, _controller, _retiring_engine
+    global _aggregator, _controller, _retiring_engine, _save_tracker
     if _controller is not None:
         _controller.stop()
     _controller=None
+    if _save_tracker is not None:
+        _save_tracker.close()
+        _save_tracker=None
     if _aggregator is not None:
         _aggregator.stop()
         _retiring_engine=_aggregator
