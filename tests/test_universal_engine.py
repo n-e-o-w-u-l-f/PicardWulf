@@ -116,7 +116,9 @@ class TestStoreAndRunner(unittest.TestCase):
             s.save_result(mod.query_key(Q),Q,{'status':{}})
             eng=mod.UniversalAggregator(store=s,credentials={})
             try:self.assertFalse(eng.schedule(Q))
-            finally:eng.stop()
+            finally:
+                eng.stop()
+                self.assertTrue(eng.wait_stopped(10))
     def test_automatic_sources_and_missing_auth(self):
         calls=[]
         def fake(source,url,query,headers=None,form=None):
@@ -144,7 +146,9 @@ class TestStoreAndRunner(unittest.TestCase):
                 self.assertEqual(status['lastfm'],'not_configured')
                 self.assertEqual(set(calls),{'musicbrainz','deezer','itunes'})
                 self.assertEqual(x['query']['albumartist'],'Eminem')
-            finally:eng.stop()
+            finally:
+                eng.stop()
+                self.assertTrue(eng.wait_stopped(10))
     def test_no_plaintext_vault_fallback(self):
         if cr.os.name!='nt':
             with self.assertRaises(RuntimeError):cr.save({'lastfm_api_key':'foo'})

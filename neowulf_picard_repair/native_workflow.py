@@ -147,3 +147,11 @@ def media_backup(path, backup_root=None):
         target.unlink(missing_ok=True)
         raise
     return target
+
+
+def backup_envelope(path):
+    """Worker-only receipt; no File/Qt references cross the thread boundary."""
+    target = media_backup(path)
+    stat = Path(path).stat()
+    return {'path': str(path), 'backup': str(target),
+            'size': stat.st_size, 'mtime_ns': stat.st_mtime_ns}

@@ -116,20 +116,20 @@ class TestAutomaticWriting(unittest.TestCase):
     def test_opt_in_save_backups_first(self):
         f=DummyFile()
         events=[]
-        def backup(_path):events.append('backup');return Path('saved-audio.flac')
+        events.append('backup')
         f.save=lambda:events.append('save')
         with self.with_fake_api():
-            result=auto.apply_best_to_file(f,Q,self.result(),save=True,backup_func=backup)
+            result=auto.apply_best_to_file(f,Q,self.result(),save=True,
+                verified_backup={'path':f.filename,'backup':'saved-audio.flac'})
         self.assertEqual(events,['backup','save'])
         self.assertEqual(result['backup'],'saved-audio.flac')
 
     def test_backup_failure_does_not_mutate_tags(self):
         f=DummyFile()
         before=dict(f.metadata)
-        def no_backup(_path):raise nw.UnsafeCandidate('disk full')
         with self.with_fake_api():
             with self.assertRaises(nw.UnsafeCandidate):
-                auto.apply_best_to_file(f,Q,self.result(),save=True,backup_func=no_backup)
+                auto.apply_best_to_file(f,Q,self.result(),save=True)
         self.assertEqual(f.metadata,before)
         self.assertEqual(f.saves,0)
 

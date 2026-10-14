@@ -25,9 +25,14 @@ class TestBulkBackgroundIngest(unittest.TestCase):
             try:
                 duration=time.monotonic()
                 for i in range(10000):
-                    self.assertTrue(engine.schedule_async({
+                    raw={
                         'artist':'Eminem','title':f'New track {i}',
-                        'album':'Album','albumartist':'Eminem'}))
+                        'album':'Album','albumartist':'Eminem'}
+                    deadline=time.monotonic()+10
+                    while not engine.schedule_async(raw):
+                        self.assertLess(time.monotonic(),deadline)
+                        self.assertLessEqual(engine.status()['staging'],2048)
+                        time.sleep(.005)
                 enqueue_time=time.monotonic()-duration
                 # Source hook only normalizes hashes; database connection and
                 # network work are exclusively performed on background threads.
@@ -41,6 +46,7 @@ class TestBulkBackgroundIngest(unittest.TestCase):
                 self.assertTrue(engine.status()['paused'])
             finally:
                 engine.stop()
+                self.assertTrue(engine.wait_stopped(10))
 
     def test_pause_resume_controls_dispatch_without_dropping_jobs(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -53,14 +59,19 @@ class TestBulkBackgroundIngest(unittest.TestCase):
                 self.assertEqual(store.job_count(),1)
                 self.assertEqual(engine.status()['pending'],0)
                 self.assertTrue(engine.paused)
-            finally: engine.stop()
+            finally:
+                engine.stop()
+                self.assertTrue(engine.wait_stopped(10))
             # A new engine must recognise the persisted job without copying
             # the SQLite cache away or deleting unfinished work.
             fresh=mod.UniversalAggregator(store=store,credentials={},paused=True)
             try:
+                self.assertTrue(fresh.wait_ready())
                 self.assertEqual(fresh.status()['backlog'],1)
                 self.assertEqual(fresh.status()['pending'],0)
-            finally:fresh.stop()
+            finally:
+                fresh.stop()
+                self.assertTrue(fresh.wait_stopped(10))
 
     def test_read_completed_results_in_one_sqlite_batch(self):
         with tempfile.TemporaryDirectory() as directory:

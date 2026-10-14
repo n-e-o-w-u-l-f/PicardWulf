@@ -14,7 +14,8 @@ class TestPackaging(unittest.TestCase):
         self.assertIn('api.tagger.move_file_to_track(f, release, recording)',self.ui)
         self.assertIn('native_release_target(q,c)',self.ui)
     def test_explicit_tag_save_uses_native_picard(self):
-        self.assertIn('media_backup(f.filename)',self.ui)
+        self.assertIn("io.backup('backup:manual',f.filename)",self.ui)
+        self.assertNotIn('media_backup(f.filename)',self.ui)
         self.assertIn('f.update()',self.ui)
         self.assertIn('f.save()',self.ui)
         self.assertIn('QMessageBox.question',self.ui)

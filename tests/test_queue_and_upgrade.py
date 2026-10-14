@@ -40,7 +40,9 @@ class TestQueue(unittest.TestCase):
                 self.assertEqual(s.job_count(),0,'persistent jobs not drained')
                 self.assertEqual(len(s.recent(200)),115)
                 self.assertEqual(e.status()['failed'],0)
-            finally:e.stop()
+            finally:
+                e.stop()
+                self.assertTrue(e.wait_stopped(10))
 
     def test_schema_upgrade(self):
         with tempfile.TemporaryDirectory() as temp:

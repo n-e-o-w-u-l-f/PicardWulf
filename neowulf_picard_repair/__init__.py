@@ -151,6 +151,7 @@ def _album_guard(api, album, metadata, release_node):
 
 _aggregator = None
 _controller = None
+_retiring_engine = None
 
 
 def _get_engine():
@@ -203,15 +204,19 @@ def _file_loaded(api, file):
         try:
             if _controller is not None:
                 _controller.watch(file,md)
-            _aggregator.schedule_async(md)
+            else:
+                api.logger.warning('PicardWulf admission unavailable: GUI controller missing')
         except Exception as exc:
             api.logger.warning('Universal file load scheduling failed: %s', type(exc).__name__)
 
 
 def _track_loaded(api, track, metadata, track_node, release_node=None):
     """Rescan when MusicBrainz track information has been refreshed."""
-    if _aggregator is not None:
-        try: _aggregator.schedule_async(metadata)
+    if _aggregator is not None and _controller is not None:
+        try:
+            for file in getattr(track,'iterfiles',lambda: ())():
+                md=_original_file_snapshot(file)
+                if md is not None:_controller.watch(file,md)
         except Exception as exc:
             api.logger.warning('Universal track scheduling failed: %s', type(exc).__name__)
 
@@ -223,10 +228,7 @@ class SourceStatus(BaseAction):
     def callback(self, objs):
         eng = _get_engine()
         st = eng.status()
-        try: saved = load_credentials()
-        except (OSError, RuntimeError, ValueError): saved = {}
         creds = dict(eng.credentials)
-        creds.update(saved)
         spotify = bool(creds.get('spotify_access_token') or
                        (creds.get('spotify_client_id') and creds.get('spotify_client_secret')))
         _show('NEOWULF Universal Metadata',
@@ -237,6 +239,9 @@ class SourceStatus(BaseAction):
             f'Last.fm: {"konfiguriert" if creds.get("lastfm_api_key") else "API-Schlüssel fehlt"}\n\n'
             f'Geplant: {st["queued"]} · Eingangs-Puffer: {st["staging"]} · Ausstehend: {st["backlog"]} · In Arbeit: {st["pending"]} · Fehlgeschlagen: {st["failed"]} · Pause: {st["paused"]}\n'
             f'Großer Rückstand beim Start: {st["auto_paused_backlog"]}\n\n'
+            f'Bestätigt verarbeitet: {st["committed"]} · Wiederholen: {st["retry"]}\n'
+            f'Rückstau: {st["backpressure"]} · Datenbankfehler: {st["db_error"] or "keiner"}\n'
+            'Eingangs-Puffer ist noch NICHT dauerhaft; Überlauf wartet in Picard.\n'
             'Konfiguriert bedeutet nicht, dass der Anbieter die Anfrage freigibt.\n'
             'Detaillierte Antworten und HTTP-Status unter Ergebnisse ansehen.')
 
@@ -305,14 +310,16 @@ class ResultsAction(BaseAction):
         from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QLabel, QTableWidget,
                                      QTableWidgetItem, QDialogButtonBox)
         eng=_get_engine()
-        rows=eng.store.recent(80)
         dlg=QDialog(None)
+        from .background_io import create_gui_io
+        from PyQt6.QtCore import QTimer
+        io=create_gui_io(dlg,eng)
         dlg.setWindowTitle('NEOWULF – Universal Metadata Aggregator')
         dlg.resize(1150,630)
         layout=QVBoxLayout(dlg)
         status=eng.status()
         layout.addWidget(QLabel(
-            f'{len(rows)} zuletzt untersuchte Titel · {status["pending"]} in Arbeit · {status["backlog"]} ausstehend. '
+            f'Zuletzt untersuchte Titel · {status["pending"]} in Arbeit · {status["backlog"]} ausstehend. '
             'Nur Vorschau; keine Tags oder Dateinamen verändert.'))
         fields=('Datei/Tag','Quelle','Treffer','Interpret','Album','Confidence',
                 'Bewertung','ISRC','Provider-Status','URL')
@@ -320,26 +327,41 @@ class ResultsAction(BaseAction):
         table.setHorizontalHeaderLabels(list(fields))
         table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         table.setSortingEnabled(False)
-        for record in rows:
-            q=record['query'];result=record['payload']
-            candidates=[c for c in result.get('candidates',[]) if c.get('score')]
-            status=', '.join(f'{k}:{v}' for k,v in result.get('status',{}).items())
-            if not candidates:candidates=[{}]
-            for candidate in candidates[:8]:
-                idx=table.rowCount();table.insertRow(idx)
-                values=(q['artist']+' – '+q['title'],candidate.get('source','(keine Treffer)'),
-                        candidate.get('title',''),candidate.get('artist',''),candidate.get('album',''),
-                        str(round(100*candidate.get('release_score',candidate.get('score',0)),1))+'%' if candidate else '',
-                        result.get('verdict',''),candidate.get('isrc',''),status,
-                        candidate.get('url',''))
-                for i,v in enumerate(values):table.setItem(idx,i,QTableWidgetItem(str(v)))
-        table.setSortingEnabled(True)
-        table.resizeColumnsToContents()
+        signature=[None]
+        def populate():
+            io.read_recent()
+            rows=io.recent
+            current=repr([(r['updated'],r['query']) for r in rows])
+            if signature[0]==current:return
+            signature[0]=current
+            table.setSortingEnabled(False)
+            table.setRowCount(0)
+            for record in rows:
+                q=record['query'];result=record['payload']
+                candidates=[c for c in result.get('candidates',[]) if c.get('score')]
+                status=', '.join(f'{k}:{v}' for k,v in result.get('status',{}).items())
+                if not candidates:candidates=[{}]
+                for candidate in candidates[:8]:
+                    idx=table.rowCount();table.insertRow(idx)
+                    values=(q['artist']+' – '+q['title'],candidate.get('source','(keine Treffer)'),
+                            candidate.get('title',''),candidate.get('artist',''),candidate.get('album',''),
+                            str(round(100*candidate.get('release_score',candidate.get('score',0)),1))+'%' if candidate else '',
+                            result.get('verdict',''),candidate.get('isrc',''),status,
+                            candidate.get('url',''))
+                    for i,v in enumerate(values):table.setItem(idx,i,QTableWidgetItem(str(v)))
+            table.setSortingEnabled(True)
+            table.resizeColumnsToContents()
         layout.addWidget(table)
         buttons=QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.rejected.connect(dlg.reject);buttons.accepted.connect(dlg.accept)
         layout.addWidget(buttons)
+        timer=QTimer(dlg)
+        timer.timeout.connect(populate)
+        timer.start(500)
+        populate()
         dlg.exec()
+        timer.stop()
+        io.stop()
 
 
 
@@ -377,11 +399,11 @@ class RefreshAction(BaseAction):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No)
         if response != QMessageBox.StandardButton.Yes:return
-        n=0
-        for file in self.api.tagger.iter_all_files():
-            md=_file_snapshot(file)
-            if md is not None and eng.schedule_async(md,force=True):n+=1
-        _show('NEOWULF',f'{n} Titel zur erneuten Prüfung angemeldet.\n'
+        if _controller is None:
+            _show('NEOWULF','Hintergrundaufnahme nicht verfügbar; nichts angemeldet.','warning')
+            return
+        _controller.refresh(self.api.tagger.iter_all_files(),force=True)
+        _show('NEOWULF','Geladene Titel werden schrittweise zur erneuten Prüfung angemeldet.\n'
                            'Später Werkzeuge → NEOWULF → Gesammelte Treffer ansehen öffnen.')
 
 
@@ -457,14 +479,22 @@ def enable(api):
     api.plugin_config.register_option('auto_apply_best', True)
     api.plugin_config.register_option('auto_save_with_backup', False)
     api.plugin_config.register_option('search_paused', False)
+    api.plugin_config.register_option('sqlite_batch_size', 256)
     try:
-        _aggregator = UniversalAggregator(paused=bool(api.plugin_config.get('search_paused', False)))
+        _aggregator = UniversalAggregator(paused=bool(api.plugin_config.get('search_paused', False)),
+                                         predecessor=_retiring_engine,
+                                         batch_size=api.plugin_config.get('sqlite_batch_size',256))
     except Exception as exc:
         _aggregator = None
         api.logger.error('Universal aggregator initialization failed: %s', type(exc).__name__)
         return
     try:
-        _controller = AutoApplyController(api, _aggregator, _file_snapshot)
+        _controller = AutoApplyController(api, _aggregator, _file_snapshot,
+                                          ingest_snapshot_func=_original_file_snapshot)
+        if hasattr(api.tagger,'iter_all_files'):
+            # Reload recovery covers overflow identities still owned by Picard.
+            # SQLite skips unchanged cached work; this never forces a rescan.
+            _controller.refresh(api.tagger.iter_all_files())
     except Exception as exc:
         _controller = None
         api.logger.error('Automatic matching initialization failed: %s',type(exc).__name__)
@@ -482,9 +512,11 @@ def enable(api):
 
 
 def disable():
-    global _aggregator, _controller
+    global _aggregator, _controller, _retiring_engine
     if _controller is not None:
         _controller.stop()
     _controller=None
-    if _aggregator is not None:_aggregator.stop()
+    if _aggregator is not None:
+        _aggregator.stop()
+        _retiring_engine=_aggregator
     _aggregator=None

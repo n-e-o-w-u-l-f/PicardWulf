@@ -1,5 +1,14 @@
 # Changelog
 
+### 2026-10-14 — v1.0 S1 durable background scheduler (source milestone)
+
+- Bound uncommitted admission to 2,048 jobs, including in-flight batches; retry overflow through weak Picard file identities and display staged versus committed state.
+- Move SQLite initialization, migration, status/result reads and all full-media backup work off GUI callbacks. Serialize runtime DB operations through one leased writer and deliver immutable receipts with queued Qt signals.
+- Add transactional schema v2 migration with consistent SQLite backup, per-provider progress, revision fencing, restart recovery, bounded retries and fair dispatch for new files alongside historical backlog.
+- Make disable/enable wait for a background flush acknowledgement; preserve failed batches and reject stale force-result/backup completions and edited/renamed targets.
+- Validate 129 unit/contract tests, real SQLite BUSY/FULL, abrupt helper termination with 39k retained jobs, and real Qt load/backup/refresh regressions. See [S1 evidence](docs/planning/S1-EXECUTION-2026-10-14.md).
+- BMAX runtime and deployment remain OPEN. No stable release, Picard restart, original music change, new paid service or repeated Deep Research.
+
 ## PicardWulf v1.0 — Target release (Windows runtime acceptance pending)
 
 All changes below belong to the **same v1.0 development target**. A completed local fix is a development milestone, not a new product release. The version remains v1.0 until all release acceptance criteria have been met.

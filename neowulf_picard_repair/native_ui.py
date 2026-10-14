@@ -4,8 +4,11 @@ All Qt callbacks run on the Picard UI thread. Background catalogue workers only
 write to the SQLite cache; they never touch Picard File, Album or Qt objects.
 """
 from .native_workflow import (
-    UnsafeCandidate, changes_for, media_backup, native_release_target, tag_proposal,
+    UnsafeCandidate, changes_for, native_release_target, tag_proposal,
 )
+from .background_io import create_gui_io
+import json
+import weakref
 from .universal_engine import clean_track, query_key
 from .universal_adapters import one
 
@@ -24,6 +27,9 @@ def show_native_window(api, aggregator, files, snapshot_func):
             'Keine geladenen Audiodateien. Zuerst über Datei → Ordner hinzufügen laden.')
         return
     dlg = QDialog(None)
+    io = create_gui_io(dlg, aggregator)
+    pending_save = [None]
+    pending_refresh = [None]
     dlg.setWindowTitle('PicardWulf v1.0 – Multi-Source & natives Picard-Matching')
     dlg.resize(1230, 710)
     layout = QVBoxLayout(dlg)
@@ -72,6 +78,7 @@ def show_native_window(api, aggregator, files, snapshot_func):
 
     def update_view():
         nonlocal available
+        finish_save()
         f=current_file()
         md=snapshot_func(f) if f else None
         q=clean_track(md) if md is not None else None
@@ -80,7 +87,20 @@ def show_native_window(api, aggregator, files, snapshot_func):
             table.setRowCount(0)
             status.setText('Keine auswertbaren Metadaten. Eindeutiger Dateiname »Künstler - Titel« wird unterstützt.')
             return
-        data=aggregator.store.get_result(query_key(q))
+        key=query_key(q)
+        if pending_refresh[0] is not None:
+            ref,identity,raw=pending_refresh[0]
+            owner=ref()
+            owner_md=snapshot_func(owner) if owner is not None else None
+            owner_q=clean_track(owner_md) if owner_md is not None else None
+            if owner is None or (str(owner.filename),id(owner))!=identity or owner_q!=raw:
+                pending_refresh[0]=None
+            elif aggregator.schedule_async(raw,force=True):
+                pending_refresh[0]=None
+        io.read([key])
+        waiting=(pending_refresh[0] is not None and query_key(pending_refresh[0][2])==key)
+        data=io.results.get(key) if not waiting else None
+        if not data:aggregator.schedule_async(md)
         signature=(chooser.currentIndex(),data['updated'] if data else None)
         if last_view_signature[0]==signature:return
         last_view_signature[0]=signature
@@ -112,10 +132,19 @@ def show_native_window(api, aggregator, files, snapshot_func):
         QMessageBox.warning(dlg,'PicardWulf – keine Änderung',str(err))
 
     def start_refresh():
+        if pending_refresh[0] is not None:
+            warn('Die letzte erneute Suche wartet noch auf Platz in der Warteschlange.');return
         f=current_file()
         md=snapshot_func(f) if f else None
         if md is None:warn('Keine Dateimetadaten gefunden.');return
-        aggregator.schedule_async(md,force=True)
+        q=clean_track(md)
+        if q is None:warn('Titel oder Interpret fehlen.');return
+        key=query_key(q)
+        io.invalidate(key)
+        if not aggregator.schedule_async(q,force=True):
+            pending_refresh[0]=(weakref.ref(f),(str(f.filename),id(f)),q)
+        else:
+            pending_refresh[0]=None
         last_view_signature[0]=None
         table.setRowCount(0)
         status.setText('Neue Abfragen werden ausgeführt. Ergebnisse folgen über die Warteschlange.')
@@ -171,25 +200,46 @@ def show_native_window(api, aggregator, files, snapshot_func):
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No)
             if answer!=QMessageBox.StandardButton.Yes:return
-            backup=media_backup(f.filename)
+            if pending_save[0] is not None:
+                raise UnsafeCandidate('Eine Hintergrundsicherung läuft bereits.')
+            identity=(str(f.filename),id(f),json.dumps(dict(f.metadata),sort_keys=True))
+            if not io.backup('backup:manual',f.filename):
+                raise UnsafeCandidate('Hintergrundsicherung ist ausgelastet.')
+            pending_save[0]=(weakref.ref(f),identity,dict(proposal))
+            save.setEnabled(False)
+            status.setText('Original wird im Hintergrund gesichert. Noch keine Tags geändert.')
+        except Exception as e:
+            api.logger.warning('Tag save: %s',type(e).__name__)
+            warn(e)
+
+    def finish_save():
+        if pending_save[0] is None:return
+        receipt=io.backups.pop('backup:manual',None)
+        if receipt is None:return
+        ref,identity,proposal=pending_save[0]
+        pending_save[0]=None
+        save.setEnabled(True)
+        f=ref()
+        try:
+            if 'error' in receipt:raise UnsafeCandidate('Hintergrundsicherung fehlgeschlagen.')
+            if (f is None or str(f.filename)!=identity[0] or id(f)!=identity[1] or
+                    json.dumps(dict(f.metadata),sort_keys=True)!=identity[2]):
+                raise UnsafeCandidate('Datei oder Vorschau inzwischen geändert; nichts gespeichert.')
             old=Metadata()
             old.copy(f.metadata)
             try:
-                for field,value in proposal.items():
-                    f.metadata[field]=value
+                for field,value in proposal.items():f.metadata[field]=value
                 f.update()
-                f.save()  # Asynchronous Picard native save; it may still fail later.
+                f.save()
             except Exception:
                 f.metadata.copy(old)
                 f.update()
                 raise
             QMessageBox.information(dlg,'PicardWulf – Speicherung gestartet',
-                f'Backup verifiziert: {backup}\n\n'
+                f'Backup verifiziert: {receipt["value"]["backup"]}\n\n'
                 'Picard hat die asynchrone Tag-Speicherung gestartet. Den endgültigen '
                 'Erfolg im Picard-Dateistatus prüfen. Das Backup bleibt erhalten.')
-        except Exception as e:
-            api.logger.warning('Tag save: %s',type(e).__name__)
-            warn(e)
+        except Exception as exc:warn(exc)
 
     chooser.currentIndexChanged.connect(update_view)
     refresh.clicked.connect(start_refresh)
@@ -202,3 +252,5 @@ def show_native_window(api, aggregator, files, snapshot_func):
     timer.start(3500)
     update_view()
     dlg.exec()
+    timer.stop()
+    io.stop()

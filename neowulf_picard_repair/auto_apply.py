@@ -5,10 +5,13 @@ accessed on Picard's GUI thread via a single QTimer. Automatic disk saves are
 OFF by default and require a separately confirmed option and full audio backup.
 """
 from dataclasses import dataclass
+from collections import deque
+import json
 import time
 import weakref
 
-from .native_workflow import UnsafeCandidate, changes_for, media_backup, tag_proposal
+from .native_workflow import UnsafeCandidate, changes_for, tag_proposal
+from .background_io import create_gui_io
 from .universal_engine import clean_track, query_key
 
 
@@ -18,6 +21,10 @@ class Watch:
     query: dict
     key: str
     added: float
+    identity: int
+    baseline: str
+    admitted: bool = False
+    force: bool = False
 
 
 def proposal_for_auto(q, result):
@@ -38,7 +45,7 @@ def proposal_for_auto(q, result):
     return candidate,proposal
 
 
-def apply_best_to_file(file, q, result, *, save=False, backup_func=media_backup):
+def apply_best_to_file(file, q, result, *, save=False, verified_backup=None):
     """Only call from the GUI thread. No write occurs until backup succeeds."""
     candidate,proposal=proposal_for_auto(q,result)
     md=getattr(file,'metadata',None)
@@ -58,7 +65,9 @@ def apply_best_to_file(file, q, result, *, save=False, backup_func=media_backup)
     if save and changes:
         if not getattr(file,'can_save',True) or not getattr(file,'can_edit_tags',True):
             raise UnsafeCandidate('Datei nicht beschreibbar.')
-        backup=backup_func(file.filename)
+        if not verified_backup or verified_backup.get('path') != file.filename:
+            raise UnsafeCandidate('Verifizierte Hintergrundsicherung fehlt.')
+        backup=verified_backup['backup']
     else:
         backup=None
     # Keep old metadata to roll back synchronous failure.
@@ -89,84 +98,128 @@ def apply_best_to_file(file, q, result, *, save=False, backup_func=media_backup)
 class AutoApplyController:
     """One timer for all files, no threads touching mutable Picard objects."""
 
-    def __init__(self, api, engine, snapshot_func):
+    def __init__(self, api, engine, snapshot_func, ingest_snapshot_func=None):
         from PyQt6.QtCore import QTimer
         self.api=api
         self.engine=engine
         self.snapshot_func=snapshot_func
+        self.ingest_snapshot_func=ingest_snapshot_func or snapshot_func
         self.watches={}
         self.done=set()
-        self._cursor=0
+        self._round_robin=deque()
+        self._backup_wait=None
+        self._refresh_iterator=None
+        self._refresh_force=False
+        self.io=create_gui_io(api.tagger, engine)
         self.stopped=False
         self.timer=QTimer(api.tagger)
-        self.timer.setInterval(1400)
+        self.timer.setInterval(50)
         self.timer.timeout.connect(self.poll)
         self.timer.start()
 
-    def watch(self,file,metadata):
+    def watch(self,file,metadata,force=False):
         if self.stopped:return
         q=clean_track(metadata)
         if q is None:return
         path=getattr(file,'filename',None)
-        if not path or path in self.done:return
+        identity=(path,id(file))
+        if not path or (identity in self.done and not force):return
+        if force:
+            self.done.discard(identity)
+            self.io.invalidate(query_key(q))
         try:ref=weakref.ref(file)
         except TypeError:
             return  # never retain unbounded strong references to Picard files
-        self.watches[path]=Watch(ref,q,query_key(q),time.monotonic())
+        if identity not in self.watches:self._round_robin.append(identity)
+        baseline=json.dumps(dict(getattr(file,'metadata',{})),sort_keys=True)
+        admitted=self.engine.schedule_async(q,force=force)
+        self.watches[identity]=Watch(ref,q,query_key(q),time.monotonic(),id(file),baseline,admitted,force)
+
+    def refresh(self, files, force=False):
+        self._refresh_iterator=iter(files)
+        self._refresh_force=force
 
     def poll(self):
-        if self.stopped or self.engine.paused:return
-        if not self.api.plugin_config.get('auto_apply_best',True):
-            return
-        paths=list(self.watches)
-        if not paths:return
-        # Fair round-robin instead of forever polling the oldest 24 files.
-        n=min(96,len(paths))
-        offset=self._cursor % len(paths)
-        selected=[paths[(offset+i)%len(paths)] for i in range(n)]
-        self._cursor=(offset+n)%len(paths)
+        if self.stopped:return
+        self._finish_backup()
+        if self._refresh_iterator is not None:
+            for _ in range(16):
+                try:file=next(self._refresh_iterator)
+                except StopIteration:
+                    self._refresh_iterator=None
+                    break
+                snapshot=self.snapshot_func if self._refresh_force else self.ingest_snapshot_func
+                metadata=snapshot(file)
+                if metadata is not None:self.watch(file,metadata,force=self._refresh_force)
+        # Retry overflow through weak file identities, even while search is
+        # paused. Pause affects dispatch, never durability of newly added files.
+        selected=[]
+        for _ in range(min(32,len(self._round_robin))):
+            identity=self._round_robin.popleft()
+            watch=self.watches.get(identity)
+            if watch is None:continue
+            selected.append(identity)
+            self._round_robin.append(identity)
         expired=[]
         keys=[]
-        for path in selected:
-            watch=self.watches.get(path)
+        for identity in selected:
+            path,_=identity
+            watch=self.watches.get(identity)
             if watch is None:continue
             file=watch.file_ref()
-            if (file is None or time.monotonic()-watch.added>3600
-                    or getattr(file,'filename',None)!=path):
-                expired.append(path)
-            else:keys.append(watch.key)
-        for path in expired:self.watches.pop(path,None)
-        # ONE SQLite read for this entire GUI timer tick (not 96 opens).
-        completed=self.engine.store.get_results(keys)
-        for path in selected:
-            watch=self.watches.get(path)
+            if file is None or getattr(file,'filename',None)!=path or id(file)!=watch.identity:
+                expired.append(identity)
+            else:
+                if not watch.admitted:
+                    watch.admitted=self.engine.schedule_async(watch.query,force=watch.force)
+                keys.append(watch.key)
+        for identity in expired:self.watches.pop(identity,None)
+        self.io.read(keys)
+        if self.engine.paused or not self.api.plugin_config.get('auto_apply_best',True):return
+        completed=self.io.results
+        for identity in selected:
+            path,_=identity
+            watch=self.watches.get(identity)
             if watch is None:continue
-            result=completed.get(watch.key)
+            result=completed.get(watch.key) if watch.admitted else None
             if result is None:continue
             file=watch.file_ref()
             if file is None:
-                self.watches.pop(path,None)
+                self.watches.pop(identity,None)
                 continue
             # Picard may have loaded a MusicBrainz release during the request.
             # Protect unrelated live edits, permit recognizably introduced MBIDs.
             current=self.snapshot_func(file)
             current_q=clean_track(current) if current is not None else None
             if current_q is None:
-                self.watches.pop(path,None)
+                self.watches.pop(identity,None)
                 continue
-            if query_key(current_q)!=watch.key and not (
-                current_q.get('recording_mbid') and not watch.query.get('recording_mbid')
-            ):
-                self.watches.pop(path,None)
+            compatible=dict(current_q)
+            compatible['recording_mbid']=watch.query.get('recording_mbid','')
+            if query_key(current_q)!=watch.key and query_key(compatible)!=watch.key:
+                self.watches.pop(identity,None)
+                continue
+            baseline=json.loads(watch.baseline)
+            live=dict(file.metadata)
+            for field in ('musicbrainz_recordingid','musicbrainz_albumid'):
+                if field not in baseline:live.pop(field,None)
+            if json.dumps(live,sort_keys=True)!=watch.baseline:
+                self.watches.pop(identity,None)
                 continue
             if current is not None and current.get('~picardwulf_source',''):
-                self.watches.pop(path,None)
+                self.watches.pop(identity,None)
                 continue
-            self.watches.pop(path,None)
-            self.done.add(path)
             try:
                 save=bool(self.api.plugin_config.get('auto_save_with_backup',False))
-                report=apply_best_to_file(file,watch.query,result['payload'],save=save)
+                proposal_for_auto(watch.query,result['payload'])
+                if save:
+                    if self._backup_wait is not None:continue
+                    token='backup:auto'
+                    if not self.io.backup(token,path):continue
+                    self._backup_wait=(identity,watch,result,
+                                       json.dumps(dict(file.metadata),sort_keys=True))
+                    continue
+                report=apply_best_to_file(file,watch.query,result['payload'])
             except UnsafeCandidate as exc:
                 self.api.logger.info('PicardWulf auto: review required (%s)',str(exc))
             except Exception as exc:
@@ -175,9 +228,38 @@ class AutoApplyController:
                 self.api.logger.info(
                     'PicardWulf winner: source=%s album=%s score=%.2f save_started=%s',
                     report['source'],report['album'],report['score'],report['save_started'])
+            self.watches.pop(identity,None)
+            self.done.add(identity)
+
+    def _finish_backup(self):
+        if self._backup_wait is None:return
+        receipt=self.io.backups.pop('backup:auto',None)
+        if receipt is None:return
+        identity,watch,result,baseline=self._backup_wait
+        self._backup_wait=None
+        file=watch.file_ref()
+        if (file is None or self.watches.get(identity) is not watch or
+                getattr(file,'filename',None)!=identity[0] or id(file)!=watch.identity or
+                json.dumps(dict(file.metadata),sort_keys=True)!=baseline or
+                not self.api.plugin_config.get('auto_save_with_backup',False) or
+                not self.api.plugin_config.get('auto_apply_best',True)):
+            if self.watches.get(identity) is watch:self.watches.pop(identity,None)
+            return
+        try:
+            if 'error' in receipt:raise UnsafeCandidate('Hintergrundsicherung fehlgeschlagen.')
+            apply_best_to_file(file,watch.query,result['payload'],save=True,
+                               verified_backup=receipt['value'])
+        except Exception as exc:
+            self.api.logger.warning('PicardWulf backup/save: %s',type(exc).__name__)
+        self.watches.pop(identity,None)
+        self.done.add(identity)
 
     def stop(self):
         self.stopped=True
         self.timer.stop()
+        self.io.stop()
+        self._backup_wait=None
+        self._refresh_iterator=None
+        self._round_robin.clear()
         self.watches.clear()
         self.done.clear()

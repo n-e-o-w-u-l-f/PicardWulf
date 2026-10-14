@@ -14,7 +14,7 @@ Updated: 2026-10-14 · Project: `n-e-o-w-u-l-f/PicardWulf`
 - GitHub repository: https://github.com/n-e-o-w-u-l-f/PicardWulf
 - Branch: `main`
 - First complete source publication: `11277cb221affaaead8afc009f1bd5bab8c109f8`
-- Persistent local checkout on Legion: `/home/andreas/projects/PicardWulf`, owner `andreas`; the remote and local HEAD were equal after publication.
+- Verified canonical checkout on Legion: `/home/andreas/Projekte/n-e-o-w-u-l-f/PicardWulf`, owner `andreas`; isolated S1 worktree: `/home/andreas/Projekte/.worktrees/PicardWulf-S1-20261014`.
 - Local GitHub auth path: existing authorized `andreas` GitHub CLI on Legion; no new paid CI or OAuth credentials created. Avoid unrelated repositories.
 
 ## Implemented source
@@ -62,6 +62,19 @@ Updated: 2026-10-14 · Project: `n-e-o-w-u-l-f/PicardWulf`
 - Research made no BMAX process changes, no media modifications, no paid API purchases, no user-secret uploads.
 
 ## Next safe actions
+
+### S1 source checkpoint — 2026-10-14
+
+- Verified starting GitHub/local HEAD `a952afa84df199f5296497da1a98bf32bff12183` and clean source worktree before implementation. **TARGET_VERSION remains v1.0**; no release/tag/deployment.
+- Implemented 2,048-envelope admission bound including in-flight batches, weak GUI identity retries/backpressure, one SQLite owner, queued Qt result/backup signals, cached status, transactional schema v2 migration/SQLite backup, provider checkpoints, revision cancellation, new/backlog fairness and asynchronous stop-flush acknowledgement. Database and full-media I/O are off the GUI thread.
+- **PASS:** 129 unit/contract tests on Legion; actual SQLite BUSY/FULL regressions, migration/corrupt/future schema protection, and abrupt synthetic helper termination preserve all 29,000 historical + 10,000 newly committed jobs.
+- **PASS:** independent review fixes with regression evidence, real Qt 39k identity load and six asynchronous backup/identity cases, forced-result generation fencing, and manual forced refresh under backpressure/selection change. Aggregate measurements and commands: [S1 execution evidence](docs/planning/S1-EXECUTION-2026-10-14.md).
+- **S0 / BMAX S1 runtime: OPEN (EXTERNAL_BOUNDARY).** Desktop Commander monthly limit/offline device; direct SSH and jumps through Legion/Spinnennet cannot resolve documented `andreas-BMAX`. The actual `BMAX-B6` hostname as `megal` fails host-key verification directly and through both jump hosts; trust settings were not bypassed or changed. No Picard PID/heartbeat/live DB backup was observed; no Picard stop/restart, deployment, original audio change, API call against personal music or paid service.
+- Next: read back GitHub commit/tree and compare remote/main with clean Legion HEAD. Obtain authorized BMAX runtime observations before claiming its responsiveness/deployment; then continue S2→S3→S4→S5 in plan order. Do not restart Deep Research.
+
+The earlier validation/incident sections above are historical checkpoints; this S1 evidence supersedes the old unbounded-ingest and GUI SQLite/media-I/O findings only at source level.
+
+### Historical later-phase follow-ups (S4/S5, not current deployment)
 
 1. Run fresh `git pull --ff-only` before editing, inspect `README.md`, `CHANGELOG.md` and failing runtime gates. Preserve unrelated changes.
 2. On BMAX-B6 under interactive `megal`, install and enable via `Install-NEOWULF.cmd` (not the unsigned PS1 directly); verify actual plugin log. Do not treat file copy as activation.
