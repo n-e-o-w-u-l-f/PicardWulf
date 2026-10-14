@@ -87,7 +87,7 @@ def show_native_window(api, aggregator, files, snapshot_func):
         available=[]
         table.setRowCount(0)
         if not data:
-            aggregator.schedule(md)
+            aggregator.schedule_async(md)
             status.setText('Suche läuft im Hintergrund. Ergebnisse werden automatisch aktualisiert.')
             return
         payload=data['payload']
@@ -115,7 +115,7 @@ def show_native_window(api, aggregator, files, snapshot_func):
         f=current_file()
         md=snapshot_func(f) if f else None
         if md is None:warn('Keine Dateimetadaten gefunden.');return
-        aggregator.schedule(md,force=True)
+        aggregator.schedule_async(md,force=True)
         last_view_signature[0]=None
         table.setRowCount(0)
         status.setText('Neue Abfragen werden ausgeführt. Ergebnisse folgen über die Warteschlange.')

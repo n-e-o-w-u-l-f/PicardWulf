@@ -26,7 +26,7 @@ Updated: 2026-10-14 · Project: `n-e-o-w-u-l-f/PicardWulf`
 
 ## Validation
 
-- **PASS**: 115 Python unit/contract tests on Legion using self-contained packaged sources (`python3 -m unittest discover -s tests -q`), 2026-10-14.
+- **PASS**: 119 Python unit/contract tests on Legion using self-contained packaged sources (`python3 -m unittest discover -s tests -q`), 2026-10-14.
 - **PASS**: `git diff --check` before push; GitHub code, README and file tree read back; fast-forward push succeeded.
 - **PENDING**: actual installer/plugin activation on Windows BMAX-B6 as `megal`; the release is a candidate, not a production-verified binary.
 - **PENDING**: live credentials/API responses, rate limits and terms for individual providers.
@@ -34,6 +34,15 @@ Updated: 2026-10-14 · Project: `n-e-o-w-u-l-f/PicardWulf`
 - **IMPLEMENTED (source)**: automatic best-source candidate ranking and Picard-file metadata takeover; no counterfeit external release in native MusicBrainz album pane.
 - **PENDING**: BMAX runtime confirmation that Picard's automatic MusicBrainz lookup does not replace source-selected metadata after background completion; ensure no stale-MBID regressions.
 - **PENDING**: direct external catalogue album representation in native Picard release pane would require additional compatibility work or a Picard core feature; currently visible in PicardWulf review only.
+
+## Incident: suspected Picard UI stall with 29k known + 10k new files
+
+- **FAILURE_FINGERPRINT:** PicardWulf v1.0 load hook / BMAX-B6 / ~10,000 additions on a ~29,000-file Picard session / synchronous SQLite queue access once or more per file, repeated GUI result reads / acceptance: retain loaded files, background search pause/recovery without terminating Picard, no lost persisted jobs.
+- **ROOT CAUSE (confirmed in code, not process):** file-load processor called `schedule()`, which performed `get_result()`, `enqueue()` and `_pump()` synchronously in Picard's GUI thread. Result timer also opened SQLite per watched file and could starve later files. Six-provider queries with rate limits can take hours at this scale.
+- **GOVERNANCE:** `GUARD_OR_CHECKER_DEFECTIVE` (previous release lacked 10k UI-latency load test), plus `GOVERNANCE_GAP` for process-preserving pause and live upgrade. No confirmed BMAX process hang until runtime telemetry is available.
+- **DO_NOT_REPEAT:** no mass `RefreshAction.schedule()` writes on Qt thread, no DB deletion, no forced Picard termination, no bulk unbacked audio writes, no claiming a patched GitHub checkout repaired the already-running Windows Python process.
+- **FIX IMPLEMENTED:** `schedule_async` with memory staging and 256-row SQLite batches, fair/one-query GUI timer, pause/resume UI, auto-pause huge existing backlog on startup, opt-in live plugin swap with Picard still running.
+- **VALIDATION:** 119 local tests, including 10k-job durable ingest and paused-backlog recovery. **PENDING:** BMAX actual process health; plugin disable → live update → enable; queue counts and responsiveness; provider calls/limits while resumed.
 
 ## Next safe actions
 

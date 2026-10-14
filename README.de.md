@@ -34,6 +34,12 @@
 
 Die automatische Übernahme benötigt einen eindeutig bewerteten Treffer (standardmäßig mindestens **93,5 %** bei hinreichendem Abstand zu alternativen Releases). Dateien mit nur geratenen Angaben aus dem Dateinamen werden nicht ungeprüft verändert.
 
+## Reparatur bei 10.000+ Dateien ohne Picard-Neustart
+
+**Picard nicht beenden, nicht zwangsweise speichern und die SQLite-Datenbank nicht löschen.** Wenn die Oberfläche reagiert, unter **Optionen → Plugins** zuerst **PicardWulf deaktivieren**. Die laufende Hintergrundsuche wird gestoppt, bereits dauerhaft gespeicherte Aufträge bleiben erhalten. Anschließend im entpackten aktuellen Projekt **`Install-PicardWulf-Live.cmd`** starten und die ausdrücklich verlangte Bestätigung erst nach dem Deaktivieren des Plugins eingeben. Der Installer ersetzt gesichert nur das Plugin, **nicht den laufenden Picard-Prozess**. Danach in Picard das Plugin erneut aktivieren.
+
+Das Update nutzt eine im Hintergrund geschriebene SQLite-Sammelwarteschlange (je 256 Aufträge), eine faire, gebündelte Ergebnisprüfung und **Werkzeuge → PicardWulf → Hintergrundsuche pausieren / fortsetzen**. Ein beim Pluginstart vorhandener Rückstand von mehr als 2.000 Aufträgen wird vorsorglich pausiert und kann gezielt wieder gestartet werden. **Die 10.000-Dateien-Belastungsprüfung auf Legion ist bestanden; der Zustand des laufenden Picard auf BMAX-B6 ist noch nicht direkt überprüft.**
+
 ## Sicherheit und Grenzen
 
 MusicBrainz, Deezer und iTunes können ohne zusätzliche Zugangsdaten abgefragt werden, sofern ihre öffentlichen Dienste erreichbar sind. Spotify, SoundCloud und Last.fm benötigen legitime Zugangsdaten. Es findet **keine Umgehung von API-Limits** statt. Suchbegriffe werden an aktivierte Metadatenanbieter übertragen.

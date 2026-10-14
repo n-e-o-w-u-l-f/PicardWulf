@@ -12,7 +12,7 @@ import sqlite3
 import threading
 import time
 import unicodedata
-from collections import defaultdict
+from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from difflib import SequenceMatcher
@@ -213,6 +213,44 @@ class ResultStore:
                 return {'updated':row[0],'query':json.loads(row[1]),'payload':json.loads(row[2])}
         return None
 
+    def get_results(self, keys):
+        """Read a bounded set of completed jobs with ONE SQLite connection."""
+        keys = list(dict.fromkeys(keys))
+        if not keys:
+            return {}
+        if len(keys)>400:
+            raise ValueError('bounded batch must not exceed 400 keys')
+        slots=','.join('?' for _ in keys)
+        with self._lock, self._db() as db:
+            rows=db.execute(
+                f'SELECT k,updated,query,payload FROM results WHERE k IN ({slots})',
+                keys).fetchall()
+        now=time.time()
+        return {k:{'updated':ts,'query':json.loads(q),'payload':json.loads(p)}
+                for k,ts,q,p in rows if now-ts<TTL}
+
+    def enqueue_many(self, entries):
+        """Batch staging into one transaction, away from Picard's GUI thread.
+
+        Existing completed results are skipped unless force=True.
+        Duplicate queued jobs remain unique by key.
+        """
+        cutoff=time.time()-TTL
+        accepted=0
+        with self._lock, self._db() as db:
+            for key,q,force in entries:
+                if not force and db.execute(
+                        'SELECT 1 FROM results WHERE k=? AND updated>=?',
+                        (key,cutoff)).fetchone():
+                    continue
+                cur=db.execute(
+                    "INSERT OR IGNORE INTO jobs(k,queued,query,force,state) VALUES(?,?,?,?,'queued')",
+                    (key,time.time(),json.dumps(q,ensure_ascii=False),int(bool(force))))
+                if force and cur.rowcount==0:
+                    db.execute("UPDATE jobs SET force=1,state='queued' WHERE k=?",(key,))
+                accepted+=int(cur.rowcount>0)
+        return accepted
+
     def save_result(self,key,q,payload):
         with self._lock,self._db() as db:
             db.execute('INSERT OR REPLACE INTO results VALUES (?,?,?,?)',
@@ -262,8 +300,11 @@ def private_cache_path():
 
 
 class UniversalAggregator:
-    def __init__(self, store=None,transport=None, credentials=None):
+    def __init__(self, store=None,transport=None, credentials=None, paused=False):
         self.store=store or ResultStore(private_cache_path())
+        # A large unfinished import should not immediately flood providers
+        # when the user re-enables the plugin in an already-open Picard.
+        self.auto_paused_backlog=self.store.job_count()>2000
         self.http=transport or HTTPClient()
         if credentials is not None:
             self.credentials = credentials
@@ -279,6 +320,14 @@ class UniversalAggregator:
         self.stopped=False
         self.failed_count=0
         self.queued_count=0
+        self.paused=bool(paused or self.auto_paused_backlog)
+        self._ingest=deque()
+        self._ingest_seen=set()
+        self._ingest_lock=threading.Lock()
+        self._ingest_event=threading.Event()
+        self._ingest_thread=threading.Thread(
+            target=self._ingest_worker,name='PicardWulf-SQLite-Ingest',daemon=True)
+        self._ingest_thread.start()
         self._pump()
 
     def schedule(self,raw,force=False):
@@ -294,17 +343,75 @@ class UniversalAggregator:
         self._pump()
         return accepted
 
+    def schedule_async(self, raw, force=False):
+        """Constant-time GUI hook: NO database writes, reads or HTTP requests.
+
+        Coalesce duplicate track signatures in memory, then flush durable
+        SQLite jobs in a separate writer thread. Large folder imports do not
+        open a SQLite connection for every file.
+        """
+        q=clean_track(raw)
+        if q is None:return False
+        key=query_key(q)
+        with self._ingest_lock:
+            if self.stopped:return False
+            if key in self._ingest_seen:return False
+            self._ingest_seen.add(key)
+            self._ingest.append((key,q,bool(force)))
+        self._ingest_event.set()
+        return True
+
+    def _ingest_worker(self):
+        """Flush queued track signatures without blocking the Picard UI."""
+        failures=0
+        while True:
+            self._ingest_event.wait(0.5)
+            self._ingest_event.clear()
+            with self._ingest_lock:
+                if not self._ingest:
+                    if self.stopped:break
+                    continue
+                batch=[self._ingest.popleft() for _ in range(min(256,len(self._ingest)))]
+            try:
+                added=self.store.enqueue_many(batch)
+            except sqlite3.Error:
+                # Keep unsaved work in RAM while the engine lives. Avoid
+                # immediate spin and do not claim the jobs were persisted.
+                with self._ingest_lock:
+                    self._ingest.extendleft(reversed(batch))
+                failures+=1
+                time.sleep(min(5.,0.2*failures))
+                self._ingest_event.set()
+                continue
+            failures=0
+            with self._ingest_lock:
+                self._ingest_seen.difference_update(k for k,_,_ in batch)
+                if self._ingest:self._ingest_event.set()
+            with self._lock:self.queued_count+=added
+            if not self.stopped:self._pump()
+            elif not self._ingest:break
+
+    def pause(self):
+        """Stop scheduling new network requests; preserve SQLite backlog."""
+        with self._lock:self.paused=True
+
+    def resume(self):
+        with self._lock:
+            if self.stopped:return
+            self.paused=False
+        self._pump()
+
     def _pump(self):
         with self._lock:
             if self._pumping:
                 self._repump=True
                 return
-            if self.stopped:return
+            if self.stopped or self.paused:return
             self._pumping=True
         try:
             while True:
                 with self._lock:
-                    if self.stopped:break
+                    if self.stopped or self.paused:break
                     free=max(0,8-len(self.pending))
                     jobs=self.store.next_jobs(self.pending,free) if free else []
                     self._repump=False
@@ -391,9 +498,17 @@ class UniversalAggregator:
 
     def status(self):
         with self._lock:
-            return {'queued':self.queued_count,'pending':len(self.pending),
-                    'backlog':self.store.job_count(),'failed':self.failed_count}
+            summary={'queued':self.queued_count,'pending':len(self.pending),
+                     'failed':self.failed_count,'paused':self.paused,
+                     'auto_paused_backlog':self.auto_paused_backlog}
+        with self._ingest_lock:
+            summary['staging']=len(self._ingest)
+        summary['backlog']=self.store.job_count()
+        return summary
 
     def stop(self):
-        with self._lock:self.stopped=True
+        with self._lock:
+            self.stopped=True
+            self.paused=True
+        self._ingest_event.set()  # Flush the remaining staging to disk.
         self.executor.shutdown(wait=False,cancel_futures=True)

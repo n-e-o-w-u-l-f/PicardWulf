@@ -96,6 +96,7 @@ class AutoApplyController:
         self.snapshot_func=snapshot_func
         self.watches={}
         self.done=set()
+        self._cursor=0
         self.stopped=False
         self.timer=QTimer(api.tagger)
         self.timer.setInterval(1400)
@@ -114,21 +115,40 @@ class AutoApplyController:
         self.watches[path]=Watch(ref,q,query_key(q),time.monotonic())
 
     def poll(self):
-        if self.stopped:return
+        if self.stopped or self.engine.paused:return
         if not self.api.plugin_config.get('auto_apply_best',True):
             return
-        for path,watch in list(self.watches.items())[:24]:
+        paths=list(self.watches)
+        if not paths:return
+        # Fair round-robin instead of forever polling the oldest 24 files.
+        n=min(96,len(paths))
+        offset=self._cursor % len(paths)
+        selected=[paths[(offset+i)%len(paths)] for i in range(n)]
+        self._cursor=(offset+n)%len(paths)
+        expired=[]
+        keys=[]
+        for path in selected:
+            watch=self.watches.get(path)
+            if watch is None:continue
             file=watch.file_ref()
-            if file is None or time.monotonic()-watch.added>3600:
+            if (file is None or time.monotonic()-watch.added>3600
+                    or getattr(file,'filename',None)!=path):
+                expired.append(path)
+            else:keys.append(watch.key)
+        for path in expired:self.watches.pop(path,None)
+        # ONE SQLite read for this entire GUI timer tick (not 96 opens).
+        completed=self.engine.store.get_results(keys)
+        for path in selected:
+            watch=self.watches.get(path)
+            if watch is None:continue
+            result=completed.get(watch.key)
+            if result is None:continue
+            file=watch.file_ref()
+            if file is None:
                 self.watches.pop(path,None)
                 continue
-            if getattr(file,'filename',None)!=path:
-                self.watches.pop(path,None)
-                continue
-            # When Picard itself loads an MB release, it can change file
-            # metadata while providers are still querying. The original tags
-            # remain our query reference; an MBID newly added by Picard is
-            # recognizable. Without a native MBID, protect concurrent edits.
+            # Picard may have loaded a MusicBrainz release during the request.
+            # Protect unrelated live edits, permit recognizably introduced MBIDs.
             current=self.snapshot_func(file)
             current_q=clean_track(current) if current is not None else None
             if current_q is None:
@@ -142,15 +162,13 @@ class AutoApplyController:
             if current is not None and current.get('~picardwulf_source',''):
                 self.watches.pop(path,None)
                 continue
-            result=self.engine.store.get_result(watch.key)
-            if result is None:continue
             self.watches.pop(path,None)
             self.done.add(path)
             try:
                 save=bool(self.api.plugin_config.get('auto_save_with_backup',False))
                 report=apply_best_to_file(file,watch.query,result['payload'],save=save)
             except UnsafeCandidate as exc:
-                self.api.logger.info('PicardWulf auto: review required (%s)', str(exc))
+                self.api.logger.info('PicardWulf auto: review required (%s)',str(exc))
             except Exception as exc:
                 self.api.logger.error('PicardWulf auto failure: %s',type(exc).__name__)
             else:

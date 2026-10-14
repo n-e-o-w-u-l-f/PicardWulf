@@ -203,7 +203,7 @@ def _file_loaded(api, file):
         try:
             if _controller is not None:
                 _controller.watch(file,md)
-            _aggregator.schedule(md)
+            _aggregator.schedule_async(md)
         except Exception as exc:
             api.logger.warning('Universal file load scheduling failed: %s', type(exc).__name__)
 
@@ -211,7 +211,7 @@ def _file_loaded(api, file):
 def _track_loaded(api, track, metadata, track_node, release_node=None):
     """Rescan when MusicBrainz track information has been refreshed."""
     if _aggregator is not None:
-        try: _aggregator.schedule(metadata)
+        try: _aggregator.schedule_async(metadata)
         except Exception as exc:
             api.logger.warning('Universal track scheduling failed: %s', type(exc).__name__)
 
@@ -235,7 +235,8 @@ class SourceStatus(BaseAction):
             f'Spotify: {"konfiguriert" if spotify else "Zugangsdaten fehlen"}\n'
             f'SoundCloud: {"konfiguriert" if creds.get("soundcloud_token") else "OAuth-Token fehlt"}\n'
             f'Last.fm: {"konfiguriert" if creds.get("lastfm_api_key") else "API-Schlüssel fehlt"}\n\n'
-            f'Geplant: {st["queued"]} · Ausstehend: {st["backlog"]} · In Arbeit: {st["pending"]} · Fehlgeschlagen: {st["failed"]}\n\n'
+            f'Geplant: {st["queued"]} · Eingangs-Puffer: {st["staging"]} · Ausstehend: {st["backlog"]} · In Arbeit: {st["pending"]} · Fehlgeschlagen: {st["failed"]} · Pause: {st["paused"]}\n'
+            f'Großer Rückstand beim Start: {st["auto_paused_backlog"]}\n\n'
             'Konfiguriert bedeutet nicht, dass der Anbieter die Anfrage freigibt.\n'
             'Detaillierte Antworten und HTTP-Status unter Ergebnisse ansehen.')
 
@@ -341,6 +342,27 @@ class ResultsAction(BaseAction):
         dlg.exec()
 
 
+
+class SearchPauseAction(BaseAction):
+    TITLE = 'Hintergrundsuche pausieren / fortsetzen (ohne Picard-Neustart)'
+    MENU = ('PicardWulf',)
+
+    def callback(self, objs):
+        eng=_get_engine()
+        if eng.paused:
+            eng.resume()
+        else:
+            eng.pause()
+        self.api.plugin_config['search_paused']=eng.paused
+        state=eng.status()
+        _show('PicardWulf – Warteschlange',
+              ('PAUSIERT. Bereits laufende Anfragen dürfen noch auslaufen.' if eng.paused
+               else 'FORTGESETZT. Die gespeicherten Aufträge werden weiter bearbeitet.')
+              + f'\nSQLite-Warteschlange: {state["backlog"]}'
+              + f'\nNoch in Übertragung: {state["staging"]}'
+              + '\nAlle geladenen Dateien bleiben in Picard erhalten.')
+
+
 class RefreshAction(BaseAction):
     TITLE = 'Geladene Titel aus allen Quellen erneut prüfen'
     MENU = ('NEOWULF',)
@@ -358,7 +380,7 @@ class RefreshAction(BaseAction):
         n=0
         for file in self.api.tagger.iter_all_files():
             md=_file_snapshot(file)
-            if md is not None and eng.schedule(md,force=True):n+=1
+            if md is not None and eng.schedule_async(md,force=True):n+=1
         _show('NEOWULF',f'{n} Titel zur erneuten Prüfung angemeldet.\n'
                            'Später Werkzeuge → NEOWULF → Gesammelte Treffer ansehen öffnen.')
 
@@ -432,14 +454,15 @@ def enable(api):
     api.register_tools_menu_action(Inspect)
     api.register_tools_menu_action(Repair)
     api.register_album_metadata_processor(_album_guard, priority=-1000)
+    api.plugin_config.register_option('auto_apply_best', True)
+    api.plugin_config.register_option('auto_save_with_backup', False)
+    api.plugin_config.register_option('search_paused', False)
     try:
-        _aggregator = UniversalAggregator()
+        _aggregator = UniversalAggregator(paused=bool(api.plugin_config.get('search_paused', False)))
     except Exception as exc:
         _aggregator = None
         api.logger.error('Universal aggregator initialization failed: %s', type(exc).__name__)
         return
-    api.plugin_config.register_option('auto_apply_best', True)
-    api.plugin_config.register_option('auto_save_with_backup', False)
     try:
         _controller = AutoApplyController(api, _aggregator, _file_snapshot)
     except Exception as exc:
@@ -451,6 +474,7 @@ def enable(api):
     api.register_tools_menu_action(CredentialsAction)
     api.register_tools_menu_action(ResultsAction)
     api.register_tools_menu_action(RefreshAction)
+    api.register_tools_menu_action(SearchPauseAction)
     api.register_tools_menu_action(NativeReview)
     api.register_file_action(SelectedFileReview)
     api.register_tools_menu_action(AutoApplyToggle)

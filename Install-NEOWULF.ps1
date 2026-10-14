@@ -1,3 +1,4 @@
+param([switch]$LiveUpdate)
 # PicardWulf 1.0 – filesystem plugin installation without picard-cli.exe.
 # Source-of-truth: Picard 3 picard/const/appdirs.py (plugin_folder),
 # picard/tagger.py (manager.add_directory) and plugin3/manager/__init__.py.
@@ -17,8 +18,18 @@ if ($env:USERNAME -ine 'megal') {
 if ([string]::IsNullOrWhiteSpace($env:APPDATA)) {
     Stop-Install 'APPDATA fehlt. Benutzerbezogenen Pluginordner nicht nachweisbar.'
 }
-if (Get-Process -Name 'picard' -ErrorAction SilentlyContinue) {
-    Stop-Install 'Picard ist noch geoeffnet. Picard normal beenden und CMD erneut starten.'
+$picardRunning = @(Get-Process -Name 'picard' -ErrorAction SilentlyContinue).Count -gt 0
+if ($picardRunning) {
+    if (!$LiveUpdate) {
+        Stop-Install 'Picard ist geoeffnet. Fuer ein Update OHNE Picard-Neustart: Plugin in Optionen > Plugins deaktivieren und Install-PicardWulf-Live.cmd verwenden.'
+    }
+    Write-Host 'LIVE-UPDATE: Picard BLEIBT OFFEN. Nur das DEAKTIVIERTE Plugin wird aktualisiert.' -ForegroundColor Yellow
+    Write-Host 'Bitte in Picard unter Optionen > Plugins zuerst PicardWulf deaktivieren.' -ForegroundColor Yellow
+    Write-Host 'Wenn Picard nicht reagiert, ABBRECHEN. Niemals den Prozess beenden.' -ForegroundColor Yellow
+    $confirm = Read-Host 'Bestaetigung (JA-PLUGIN-DEAKTIVIERT)'
+    if ($confirm -cne 'JA-PLUGIN-DEAKTIVIERT') {
+        Stop-Install 'Live-Upgrade nicht freigegeben. Keine Aenderung vorgenommen.'
+    }
 }
 $source = Join-Path $PSScriptRoot 'neowulf_picard_repair'
 $required = @('__init__.py', 'MANIFEST.toml', 'repair_logic.py', 'universal_engine.py', 'universal_adapters.py', 'credentials.py', 'native_workflow.py', 'native_ui.py', 'auto_selection.py', 'auto_apply.py')
@@ -170,12 +181,17 @@ Write-Host 'Automatisches Schreiben von Audiodateien ist standardmaessig AUS; se
 Write-Host 'Native Release-Zuordnung/Tags: Werkzeuge > PicardWulf.' -ForegroundColor Yellow
 Write-Host 'VA-Reparatur bleibt separat: Werkzeuge > NEOWULF > VA-Sortierung reparieren.' -ForegroundColor Yellow
 Write-Host ''
-try {
-    Start-Process -FilePath $picard -WorkingDirectory (Split-Path $picard -Parent) -ErrorAction Stop
-    Write-Host 'Picard gestartet.' -ForegroundColor Cyan
-} catch {
-    Write-Host 'Plugin abgelegt, aber Picard konnte nicht gestartet werden.' -ForegroundColor Yellow
-    Write-Host "Details: $($_.Exception.Message)" -ForegroundColor Yellow
-    Write-Host 'Picard manuell starten und in Optionen > Plugins aktivieren.'
+if (!$picardRunning) {
+    try {
+        Start-Process -FilePath $picard -WorkingDirectory (Split-Path $picard -Parent) -ErrorAction Stop
+        Write-Host 'Picard gestartet.' -ForegroundColor Cyan
+    } catch {
+        Write-Host 'Plugin abgelegt, aber Picard konnte nicht gestartet werden.' -ForegroundColor Yellow
+        Write-Host "Details: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Host 'Picard manuell starten und in Optionen > Plugins aktivieren.'
+    }
+} else {
+    Write-Host 'LIVE-UPDATE abgeschlossen. Picard wurde NICHT beendet oder neu gestartet.' -ForegroundColor Green
+    Write-Host 'Jetzt in Picard Optionen > Plugins > PicardWulf wieder AKTIVIEREN.' -ForegroundColor Yellow
 }
 Write-Host 'ERGEBNIS: Plugin-Dateien bereit; Picard-GUI muss Erkennung und Aktivierungsstatus noch bestaetigen.' -ForegroundColor Green

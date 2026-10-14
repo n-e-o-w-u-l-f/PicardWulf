@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.1 bulk-import responsiveness hotfix — 2026-10-14 (BMAX runtime pending)
+
+- Removed per-file SQLite read/write from the Picard file-load and bulk-refresh GUI hooks; work is batched and durably enqueued by a dedicated writer thread.
+- Added bounded, fair GUI result polling with one batch SQLite read instead of up to 24 individual database opens per timer tick.
+- Added pause/resume for metadata provider requests without terminating Picard. Pause state is saved in plugin config, and unfinished database backlog remains durable.
+- Automatically pause an existing backlog above 2,000 jobs at plugin re-enable to avoid immediate large-scale requests after a live update.
+- Added `Install-PicardWulf-Live.cmd` requiring explicit operator confirmation that PicardWulf is disabled before changing any plugin files; does not terminate or restart the running Picard process.
+- Stress-tested 10,000 synthetic imported tracks and durable SQLite recovery, in addition to preexisting tests.
+- **Not a claim of live repair:** no executable BMAX remote-control session is available; user-session GUI health and hot-reload still need direct confirmation.
+
 ## 1.0.0 source-ranking update — 2026-10-14 (runtime candidate)
 
 - Added automatic best-release selection after Add Folder: MusicBrainz has no built-in ranking priority.

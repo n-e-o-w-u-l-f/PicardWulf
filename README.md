@@ -140,6 +140,18 @@ If Picard's native MusicBrainz lookup updates metadata while multi-provider sear
 - A verified media backup is kept even after successful asynchronous saving; restoration
   is manual, in case a later Picard save or move behaves unexpectedly.
 
+## Recover a large import without closing Picard
+
+For an already-open Picard session that becomes sluggish while importing thousands of tracks, **do not terminate picard.exe, reboot Windows, delete the SQLite cache or force-save all files**.
+
+If Picard's GUI still responds, first select **Options → Plugins** and disable PicardWulf. The active worker pool is stopped without closing Picard, while already-durable pending searches remain in the SQLite job database. This does not automatically save or discard Picard's loaded audio files.
+
+To update **without quitting Picard**, while the PicardWulf plugin is disabled, run **`Install-PicardWulf-Live.cmd`** from a current checkout or unpacked package under the *same Windows desktop account*. Confirm `JA-PLUGIN-DEAKTIVIERT` only after verifying the plugin is disabled. The installer keeps the original plugin directory in a backup and deploys updated Python sources; **it never terminates or restarts Picard**. Re-enable the plugin in Options → Plugins to load the new code. If Picard is completely unresponsive, do not force changes to its live files: Windows Task Manager's non-destructive process statistics and **Analyze wait chain** can help distinguish a blocked UI from sustained CPU work.
+
+The updated plugin stages new jobs in memory on the GUI thread and writes them to SQLite in groups of 256 on a separate worker. The auto-apply timer reads completed results in a single bounded batch and fairly rotates across files. **Tools → PicardWulf → Hintergrundsuche pausieren / fortsetzen (ohne Picard-Neustart)** pauses/resumes scheduling new provider calls while keeping the backlog; up to two already-running requests may complete. A backlog greater than 2,000 jobs at plugin startup is automatically paused to avoid surprise network saturation after a live upgrade. Resume it when the UI is responsive and the queue size is understood.
+
+**Status:** Tested on Legion with 10,000 synthetic jobs; real BMAX process health and in-Picard hot-reload remain unverified, and the fix cannot modify code already imported by a running plugin until Picard's plugin manager reloads it.
+
 ## Development and verification
 
 Source lives in `neowulf_picard_repair/`. Local tests:
