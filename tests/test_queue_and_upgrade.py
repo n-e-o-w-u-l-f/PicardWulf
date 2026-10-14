@@ -36,7 +36,8 @@ class TestQueue(unittest.TestCase):
                 provider_delays={s:0 for s in engine.SOURCES})
             try:
                 for _ in range(300):
-                    if s.job_count()==0:break
+                    # queued=0 can still mean the final workers are running.
+                    if s.job_count()==0 and len(s.recent(200))==115:break
                     time.sleep(.025)
                 self.assertEqual(s.job_count(),0,'persistent jobs not drained')
                 self.assertEqual(len(s.recent(200)),115)

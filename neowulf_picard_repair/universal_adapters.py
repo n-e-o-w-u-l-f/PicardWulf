@@ -40,7 +40,7 @@ def credit(value):
     return one(value)
 
 
-def item(source, title, artist, album='', duration=0, isrc='', mbid='', url='', albumartist='', release_mbid='', provider_album_id='', release_url='', release_date=''):
+def item(source, title, artist, album='', duration=0, isrc='', mbid='', url='', albumartist='', release_mbid='', provider_album_id='', release_url='', release_date='', country='', barcode='', edition='', tracknumber='', discnumber='', totaltracks='', totaldiscs=''):
     try: duration = max(0, min(10_000_000, int(float(duration or 0))))
     except (TypeError, ValueError, OverflowError): duration = 0
     return {'source': source, 'title': one(title)[:300], 'artist': one(artist)[:300],
@@ -48,7 +48,10 @@ def item(source, title, artist, album='', duration=0, isrc='', mbid='', url='', 
             'duration_ms': duration, 'isrc': one(isrc).upper()[:14],
             'recording_mbid': one(mbid)[:40], 'release_mbid': one(release_mbid)[:40], 'url': one(url)[:800],
             'provider_album_id':one(provider_album_id)[:110],
-            'release_url':one(release_url)[:800], 'release_date':one(release_date)[:40]}
+            'release_url':one(release_url)[:800], 'release_date':one(release_date)[:40],
+            'country':one(country)[:40], 'barcode':one(barcode)[:40], 'edition':one(edition)[:80],
+            'tracknumber':one(tracknumber)[:12], 'discnumber':one(discnumber)[:12],
+            'totaltracks':one(totaltracks)[:12], 'totaldiscs':one(totaldiscs)[:12]}
 
 
 def musicbrainz(q, request, credentials):
@@ -100,7 +103,9 @@ def musicbrainz(q, request, credentials):
                 found.append(item('musicbrainz',e.get('title'),credit(e.get('artist-credit')),
                     rel.get('title'),e.get('length'),(e.get('isrcs') or [''])[0],
                     rid, f'https://musicbrainz.org/release/{rel.get("id")}',
-                    credit(rel.get('artist-credit')),rel.get('id')))
+                    credit(rel.get('artist-credit')),rel.get('id'),
+                    release_date=rel.get('date',''),country=rel.get('country',''),
+                    barcode=rel.get('barcode',''),edition=rel.get('disambiguation','')))
         if not releases or len(found)==before:
             found.append(item('musicbrainz',e.get('title'),credit(e.get('artist-credit')),
                 '',e.get('length'),(e.get('isrcs') or [''])[0],rid,
@@ -130,7 +135,9 @@ def itunes(q, request, credentials):
                  e.get('trackTimeMillis'),url=e.get('trackViewUrl', ''),
                  albumartist=e.get('collectionArtistName', ''),
                  provider_album_id=e.get('collectionId',''),
-                 release_url=e.get('collectionViewUrl',''),release_date=e.get('releaseDate',''))
+                 release_url=e.get('collectionViewUrl',''),release_date=e.get('releaseDate',''),
+                 tracknumber=e.get('trackNumber',''),discnumber=e.get('discNumber',''),
+                 totaltracks=e.get('trackCount',''),totaldiscs=e.get('discCount',''))
             for e in rows(payload,'results')]
 
 
@@ -169,7 +176,8 @@ def _spotify(q, request, credentials):
                  albumartist=', '.join(a.get('name','') for a in (e.get('album') or {}).get('artists',[])),
                  provider_album_id=(e.get('album') or {}).get('id',''),
                  release_url=((e.get('album') or {}).get('external_urls') or {}).get('spotify',''),
-                 release_date=(e.get('album') or {}).get('release_date',''))
+                 release_date=(e.get('album') or {}).get('release_date',''),
+                 tracknumber=e.get('track_number',''),discnumber=e.get('disc_number',''))
             for e in rows(payload.get('tracks'),'items')]
 
 

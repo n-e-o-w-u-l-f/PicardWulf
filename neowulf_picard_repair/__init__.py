@@ -167,7 +167,10 @@ def _file_snapshot(file):
     if md is None:return None
     get=getattr(md,'get',None)
     if get is None:return None
-    keys=('title','artist','album','albumartist','isrc','musicbrainz_recordingid','length','~length')
+    keys=('title','artist','album','albumartist','isrc','musicbrainz_recordingid',
+          'musicbrainz_albumid','length','~length','date','releasecountry','barcode',
+          'releasecomment','tracknumber','totaltracks','discnumber','totaldiscs',
+          '~picardwulf_source','~picardwulf_decision','~picardwulf_review')
     data={k:get(k,'') for k in keys}
     if not data['title'] and not data['artist']:
         filename=str(getattr(file,'filename','') or '')
@@ -390,7 +393,7 @@ class ResultsAction(BaseAction):
         layout.addWidget(QLabel(
             f'Zuletzt untersuchte Titel · {status["pending"]} in Arbeit · {status["backlog"]} ausstehend. '
             'Nur Vorschau; keine Tags oder Dateinamen verändert.'))
-        fields=('Datei/Tag','Quelle','Treffer','Interpret','Album','Confidence',
+        fields=('Datei/Tag','Quelle','Treffer','Interpret','Album','Matching-Punkte',
                 'Bewertung','ISRC','Provider-Status','URL')
         table=QTableWidget(0,len(fields),dlg)
         table.setHorizontalHeaderLabels(list(fields))
@@ -414,7 +417,7 @@ class ResultsAction(BaseAction):
                     idx=table.rowCount();table.insertRow(idx)
                     values=(q['artist']+' – '+q['title'],candidate.get('source','(keine Treffer)'),
                             candidate.get('title',''),candidate.get('artist',''),candidate.get('album',''),
-                            str(round(100*candidate.get('release_score',candidate.get('score',0)),1))+'%' if candidate else '',
+                            str(round(100*candidate.get('release_score',candidate.get('score',0)),1))+'/100' if candidate else '',
                             result.get('verdict',''),candidate.get('isrc',''),status,
                             candidate.get('url',''))
                     for i,v in enumerate(values):table.setItem(idx,i,QTableWidgetItem(str(v)))

@@ -201,3 +201,7 @@ Sources: [Picard plugin v3 API](https://github.com/metabrainz/picard/blob/master
 Provider consent, explicit availability, persisted request budgets/backoff and safe token handling are now implemented. Complete cached decisions can be reused; unfinished responses cannot auto-apply. Tools → PicardWulf → **Anbieter, Suchumfang und Anfragebudget** controls disabled sources, exhaustive mode, existing Spotify access and hourly budgets. Anonymous MusicBrainz/Deezer/iTunes probes and 145 tests pass; credentialed providers and BMAX runtime remain unverified.
 
 [S2 evidence / Nachweise](docs/planning/S2-EXECUTION-2026-10-14.md).
+
+## v1.0 S3 source checkpoint
+
+Release-v2 guards edition/date/disc conflicts, reports matching points with their contributions and keeps applied previews fixed. Verified sibling recordings can resolve compatible edition ties; missing evidence requires review. The curated 41-case synthetic corpus has 10 correct automatic proposals and 31 abstentions, with zero wrong assignments. BMAX runtime and safe media-save acceptance remain open. Unverified transliteration and missing full tracklists abstain. [S3 evidence and limits](docs/planning/S3-EXECUTION-2026-10-14.md).

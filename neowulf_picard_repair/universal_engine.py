@@ -61,7 +61,7 @@ def clean_track(metadata):
     if not title or not artist or norm(artist) in ('various artists','apple music','spotify','deezer'):
         return None
     def dura():
-        for k in ('length','~length','duration','_length'):
+        for k in ('duration_ms','length','~length','duration','_length'):
             v=one(g(k))
             try:
                 if v:
@@ -71,12 +71,20 @@ def clean_track(metadata):
         return 0
     return {'title':title[:220], 'artist':artist[:220], 'album':one(g('album'))[:220],
             'albumartist':one(g('albumartist'))[:220], 'isrc':one(g('isrc')).upper(),
-            'recording_mbid':one(g('musicbrainz_recordingid')).lower(),
-            'duration_ms':dura(), 'inferred_filename':bool(one(g('inferred_filename')))}
+            'recording_mbid':one(g('musicbrainz_recordingid') or g('recording_mbid')).lower(),
+            'release_mbid':one(g('musicbrainz_albumid') or g('release_mbid')).lower(),
+            'duration_ms':dura(), 'inferred_filename':bool(one(g('inferred_filename'))),
+            'release_date':one(g('date') or g('release_date'))[:40], 'country':one(g('releasecountry') or g('country'))[:40],
+            'barcode':one(g('barcode'))[:40], 'edition':one(g('releasecomment') or g('edition'))[:80],
+            'tracknumber':one(g('tracknumber'))[:12], 'totaltracks':one(g('totaltracks'))[:12],
+            'discnumber':one(g('discnumber'))[:12], 'totaldiscs':one(g('totaldiscs'))[:12]}
 
 
 def query_key(q):
-    s='picardwulf-crosssource-v1|'+ '|'.join(norm(q.get(k,'')) for k in ('title','artist','album','isrc','recording_mbid'))
+    fields=('title','artist','album','isrc','recording_mbid','release_mbid','albumartist','duration_ms',
+            'release_date','country','barcode','edition','tracknumber','totaltracks','discnumber','totaldiscs',
+            'inferred_filename')
+    s='picardwulf-release-v2|'+json.dumps([norm(q.get(k,'')) for k in fields],ensure_ascii=True)
     return hashlib.sha256(s.encode('utf-8')).hexdigest()
 
 
@@ -110,11 +118,11 @@ def score(q,c):
     return (round(min(1.,v),4),'compatible')
 
 
-def aggregate(q, results):
+def aggregate(q, results, album_evidence=()):
     """Rank releases across ALL sources without granting MusicBrainz priority."""
     from .auto_selection import rank_candidates, decide_auto
 
-    rows = rank_candidates(q, results)
+    rows = rank_candidates(q, results, album_evidence)
     decision = decide_auto(q, rows)
     if not any(x['score'] >= .84 for x in rows):
         verdict = 'no_safe_match'
@@ -122,7 +130,7 @@ def aggregate(q, results):
         verdict = 'review_high_confidence'
     else:
         verdict = 'review'
-    return {'verdict': verdict, 'candidates': rows[:40], 'auto': decision}
+    return {'verdict': verdict, 'candidates': rows, 'auto': decision}
 
 
 class NoRedirect(HTTPRedirectHandler):
@@ -807,6 +815,9 @@ class UniversalAggregator:
         progress=self.store.provider_progress(key,revision)
         pool_key=album_cache_key(q)
         pool=None if force or not pool_key else self.store.get_response(pool_key)
+        from .auto_selection import consensus_cache_key
+        evidence_key=consensus_cache_key(q)
+        album_evidence=self.store.get_response(evidence_key) or [] if evidence_key else []
         checkpoints_complete=all(entry.get('status') in ('ok','cached','COMPLETE') for entry in progress.values())
         if pool and checkpoints_complete and not self.provider_options.get('exhaustive',False):
             reusable={}
@@ -935,14 +946,20 @@ class UniversalAggregator:
                         cap.update(state=exc.state,reason='isrc_resolution_'+exc.reason,observed=exc.attempted)
                         if retry_at:waiting.append(retry_at)
                         else:incomplete=True
-        joined=aggregate(q,source_results)
+        joined=aggregate(q,source_results,album_evidence=album_evidence)
         joined.update(status=statuses,capabilities=capabilities,queried_sources=len(source_results),
                       completion='PENDING' if waiting else 'INCOMPLETE' if incomplete else 'COMPLETE')
         if waiting or incomplete:
             joined['auto']={'state':'pending_providers' if waiting else 'incomplete_providers',
+                            'ranking_state':'INCOMPLETE','reason_code':'PROVIDERS_UNFINISHED',
                             'reason':'Provider responses are unfinished or unavailable; review only.'}
             joined['verdict']='review'
         if waiting:joined['_defer_until']=min(waiting)
+        if evidence_key and joined['auto']['state']=='ready' and joined['completion']=='COMPLETE':
+            # Only completed safe decisions count, not raw search alternatives.
+            winner=joined['auto']['candidate']
+            evidence=[c for c in album_evidence if norm(c.get('title'))!=norm(q.get('title'))]
+            self.store.save_response(evidence_key,(evidence+[winner])[-200:])
         if pool_key and source_results and joined['completion']=='COMPLETE':
             # Bounded album-local normalized candidate pool. It contains text
             # metadata only; no artwork, credentials or raw API bodies.

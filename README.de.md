@@ -66,3 +66,7 @@ Weitere technische Einzelheiten stehen in der [englischen Referenz-README](READM
 Anbieterfreigaben, klare Verfügbarkeitszustände, dauerhafte Anfragebudgets/Wartezeiten und sichere Tokenverwaltung sind umgesetzt. Vollständige Cache-Entscheidungen können wiederverwendet werden; ausstehende Antworten lösen keine automatische Übernahme aus. Unter Werkzeuge → PicardWulf → **Anbieter, Suchumfang und Anfragebudget** lassen sich Quellen, vollständige Suche, bereits vorhandener Spotify-Zugang und Stundenbudget einstellen. Anonyme MusicBrainz-/Deezer-/iTunes-Prüfungen und 145 Tests bestehen; Anbieter mit Zugangsdaten und BMAX-Laufzeit bleiben offen.
 
 [S2 evidence / Nachweise](docs/planning/S2-EXECUTION-2026-10-14.md).
+
+## v1.0 S3 Quellcode-Zwischenstand
+
+Release-v2 prüft Editions-, Datums- und Disc-Konflikte, zeigt Matching-Punkte mit Beiträgen und hält angewendete Vorschauen fest. Verifizierte weitere Aufnahmen desselben Albums können kompatible Editionskonflikte auflösen; fehlende Belege erfordern Prüfung. Der kuratierte synthetische Korpus umfasst 41 Fälle: zehn korrekte automatische Vorschläge, 31 Enthaltungen und keine falsche Zuordnung. BMAX-Laufzeit und sichere Dateispeicherung bleiben offen. Ungeprüfte Transliteration und fehlende vollständige Tracklisten führen zur Enthaltung. [S3-Nachweise und Grenzen](docs/planning/S3-EXECUTION-2026-10-14.md).

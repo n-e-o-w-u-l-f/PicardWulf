@@ -83,6 +83,15 @@ The earlier validation/incident sections above are historical checkpoints; this 
 - **OPEN:** BMAX access/runtime, actual encrypted-vault/token lifecycle there, and credentialed provider entitlement/quota. Existing Picard/music untouched; no new paid services and no host-trust bypass. S3 is the next source phase; S4/S5 and full v1.0 acceptance remain separate.
 - Final publication requires commit/push plus GitHub HEAD/LAST_TASKS/evidence readback and clean Legion checkout confirmation.
 
+### S3 release-ranking source checkpoint — 2026-10-14
+
+- Starting clean HEAD `562618ba12625ffefd525837e63955b40d79a4a9` verified against GitHub. Target remains **v1.0**; no release, deployment, Picard restart, original audio change or paid service.
+- Implemented production edition snapshots, recording/release identifier separation, release-v2 context cache, matching-point weight/contribution reports, full alternatives, missing-evidence abstention, verified sibling-recording consensus and fixed-preview conflict review.
+- **PASS:** curated synthetic 41-case corpus: 10 correct proposals, 31 abstentions, zero wrong automatic assignments or provider-artist corruption. Independent review's Critical snapshot and Important conflict/consensus issues fixed with RED→GREEN regressions. [S3 evidence and review ledger](docs/planning/S3-EXECUTION-2026-10-14.md).
+- Windows suite: 161 tests run, one platform skip, remainder PASS. Legion final suite/readback recorded in S3 evidence. Real Qt 39k load: bound 2,048, p95 6.67 ms / p99 15.41 ms, zero GUI SQLite/media operations; backup/refresh/operator probes PASS. These are synthetic Legion measurements, not BMAX evidence.
+- **OPEN:** BMAX runtime/S0, S4 media-write/recovery and S5 release gate. Unverified cross-script aliases and missing full tracklists abstain; native matching-window percentage wording is a deferred minor. Existing source and original music were preserved; Deep Research was not repeated.
+- Next safe work: finish remaining S3 evidence limitations where legitimate catalogue data is available, then S4→S5 in order. Never interpret these source results as stable v1.0 acceptance.
+
 ### Historical later-phase follow-ups (S4/S5, not current deployment)
 
 1. Run fresh `git pull --ff-only` before editing, inspect `README.md`, `CHANGELOG.md` and failing runtime gates. Preserve unrelated changes.

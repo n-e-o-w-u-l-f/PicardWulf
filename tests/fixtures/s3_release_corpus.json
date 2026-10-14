@@ -1,0 +1,1267 @@
+{
+  "model": "release-v2",
+  "synthetic": true,
+  "cases": [
+    {
+      "name": "solo compilation musicbrainz",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Eminem",
+        "album": "Curtain Call 2",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": ""
+      },
+      "results": {
+        "musicbrainz": [
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Curtain Call 2",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "musicbrainz",
+            "provider_album_id": "album-1"
+          }
+        ]
+      },
+      "safe": true,
+      "expected_source": "musicbrainz"
+    },
+    {
+      "name": "solo compilation deezer",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Eminem",
+        "album": "Curtain Call 2",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": ""
+      },
+      "results": {
+        "deezer": [
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Curtain Call 2",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "deezer",
+            "provider_album_id": "album-1"
+          }
+        ]
+      },
+      "safe": true,
+      "expected_source": "deezer"
+    },
+    {
+      "name": "solo compilation itunes",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Eminem",
+        "album": "Curtain Call 2",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": ""
+      },
+      "results": {
+        "itunes": [
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Curtain Call 2",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "itunes",
+            "provider_album_id": "album-1"
+          }
+        ]
+      },
+      "safe": true,
+      "expected_source": "itunes"
+    },
+    {
+      "name": "solo compilation spotify",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Eminem",
+        "album": "Curtain Call 2",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": ""
+      },
+      "results": {
+        "spotify": [
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Curtain Call 2",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "spotify",
+            "provider_album_id": "album-1"
+          }
+        ]
+      },
+      "safe": true,
+      "expected_source": "spotify"
+    },
+    {
+      "name": "better deezer",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Eminem",
+        "album": "Encore",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": ""
+      },
+      "results": {
+        "deezer": [
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Encore",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "deezer",
+            "provider_album_id": "album-1"
+          }
+        ],
+        "musicbrainz": [
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Greatest Hits",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "musicbrainz",
+            "provider_album_id": "album-1"
+          }
+        ]
+      },
+      "safe": true,
+      "expected_source": "deezer"
+    },
+    {
+      "name": "better spotify",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Eminem",
+        "album": "Encore",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": ""
+      },
+      "results": {
+        "spotify": [
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Encore",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "spotify",
+            "provider_album_id": "album-1"
+          }
+        ],
+        "musicbrainz": [
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Greatest Hits",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "musicbrainz",
+            "provider_album_id": "album-1"
+          }
+        ]
+      },
+      "safe": true,
+      "expected_source": "spotify"
+    },
+    {
+      "name": "conflict release_date 2004",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Eminem",
+        "album": "Encore",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": "",
+        "release_date": "2004"
+      },
+      "results": {
+        "deezer": [
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Encore",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "deezer",
+            "provider_album_id": "album-1",
+            "release_date": "2012"
+          }
+        ]
+      },
+      "safe": false,
+      "expected_source": null
+    },
+    {
+      "name": "missing release_date 2004",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Eminem",
+        "album": "Encore",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": "",
+        "release_date": "2004"
+      },
+      "results": {
+        "deezer": [
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Encore",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "deezer",
+            "provider_album_id": "album-1"
+          }
+        ]
+      },
+      "safe": false,
+      "expected_source": null
+    },
+    {
+      "name": "conflict release_date 2004-01-01",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Eminem",
+        "album": "Encore",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": "",
+        "release_date": "2004-01-01"
+      },
+      "results": {
+        "deezer": [
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Encore",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "deezer",
+            "provider_album_id": "album-1",
+            "release_date": "2004-09-01"
+          }
+        ]
+      },
+      "safe": false,
+      "expected_source": null
+    },
+    {
+      "name": "missing release_date 2004-01-01",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Eminem",
+        "album": "Encore",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": "",
+        "release_date": "2004-01-01"
+      },
+      "results": {
+        "deezer": [
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Encore",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "deezer",
+            "provider_album_id": "album-1"
+          }
+        ]
+      },
+      "safe": false,
+      "expected_source": null
+    },
+    {
+      "name": "conflict discnumber 2",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Eminem",
+        "album": "Encore",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": "",
+        "discnumber": "2"
+      },
+      "results": {
+        "deezer": [
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Encore",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "deezer",
+            "provider_album_id": "album-1",
+            "discnumber": "1"
+          }
+        ]
+      },
+      "safe": false,
+      "expected_source": null
+    },
+    {
+      "name": "missing discnumber 2",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Eminem",
+        "album": "Encore",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": "",
+        "discnumber": "2"
+      },
+      "results": {
+        "deezer": [
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Encore",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "deezer",
+            "provider_album_id": "album-1"
+          }
+        ]
+      },
+      "safe": false,
+      "expected_source": null
+    },
+    {
+      "name": "conflict totaldiscs 2",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Eminem",
+        "album": "Encore",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": "",
+        "totaldiscs": "2"
+      },
+      "results": {
+        "deezer": [
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Encore",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "deezer",
+            "provider_album_id": "album-1",
+            "totaldiscs": "1"
+          }
+        ]
+      },
+      "safe": false,
+      "expected_source": null
+    },
+    {
+      "name": "missing totaldiscs 2",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Eminem",
+        "album": "Encore",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": "",
+        "totaldiscs": "2"
+      },
+      "results": {
+        "deezer": [
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Encore",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "deezer",
+            "provider_album_id": "album-1"
+          }
+        ]
+      },
+      "safe": false,
+      "expected_source": null
+    },
+    {
+      "name": "conflict tracknumber 15",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Eminem",
+        "album": "Encore",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": "",
+        "tracknumber": "15"
+      },
+      "results": {
+        "deezer": [
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Encore",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "deezer",
+            "provider_album_id": "album-1",
+            "tracknumber": "1"
+          }
+        ]
+      },
+      "safe": false,
+      "expected_source": null
+    },
+    {
+      "name": "missing tracknumber 15",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Eminem",
+        "album": "Encore",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": "",
+        "tracknumber": "15"
+      },
+      "results": {
+        "deezer": [
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Encore",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "deezer",
+            "provider_album_id": "album-1"
+          }
+        ]
+      },
+      "safe": false,
+      "expected_source": null
+    },
+    {
+      "name": "conflict totaltracks 28",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Eminem",
+        "album": "Encore",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": "",
+        "totaltracks": "28"
+      },
+      "results": {
+        "deezer": [
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Encore",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "deezer",
+            "provider_album_id": "album-1",
+            "totaltracks": "20"
+          }
+        ]
+      },
+      "safe": false,
+      "expected_source": null
+    },
+    {
+      "name": "missing totaltracks 28",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Eminem",
+        "album": "Encore",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": "",
+        "totaltracks": "28"
+      },
+      "results": {
+        "deezer": [
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Encore",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "deezer",
+            "provider_album_id": "album-1"
+          }
+        ]
+      },
+      "safe": false,
+      "expected_source": null
+    },
+    {
+      "name": "conflict country DE",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Eminem",
+        "album": "Encore",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": "",
+        "country": "DE"
+      },
+      "results": {
+        "deezer": [
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Encore",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "deezer",
+            "provider_album_id": "album-1",
+            "country": "US"
+          }
+        ]
+      },
+      "safe": false,
+      "expected_source": null
+    },
+    {
+      "name": "missing country DE",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Eminem",
+        "album": "Encore",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": "",
+        "country": "DE"
+      },
+      "results": {
+        "deezer": [
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Encore",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "deezer",
+            "provider_album_id": "album-1"
+          }
+        ]
+      },
+      "safe": false,
+      "expected_source": null
+    },
+    {
+      "name": "conflict barcode 123",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Eminem",
+        "album": "Encore",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": "",
+        "barcode": "123"
+      },
+      "results": {
+        "deezer": [
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Encore",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "deezer",
+            "provider_album_id": "album-1",
+            "barcode": "456"
+          }
+        ]
+      },
+      "safe": false,
+      "expected_source": null
+    },
+    {
+      "name": "missing barcode 123",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Eminem",
+        "album": "Encore",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": "",
+        "barcode": "123"
+      },
+      "results": {
+        "deezer": [
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Encore",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "deezer",
+            "provider_album_id": "album-1"
+          }
+        ]
+      },
+      "safe": false,
+      "expected_source": null
+    },
+    {
+      "name": "conflict edition original",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Eminem",
+        "album": "Encore",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": "",
+        "edition": "original"
+      },
+      "results": {
+        "deezer": [
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Encore",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "deezer",
+            "provider_album_id": "album-1",
+            "edition": "deluxe"
+          }
+        ]
+      },
+      "safe": false,
+      "expected_source": null
+    },
+    {
+      "name": "missing edition original",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Eminem",
+        "album": "Encore",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": "",
+        "edition": "original"
+      },
+      "results": {
+        "deezer": [
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Encore",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "deezer",
+            "provider_album_id": "album-1"
+          }
+        ]
+      },
+      "safe": false,
+      "expected_source": null
+    },
+    {
+      "name": "version Live",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Eminem",
+        "album": "Encore",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": ""
+      },
+      "results": {
+        "deezer": [
+          {
+            "title": "Mockingbird (Live)",
+            "artist": "Eminem",
+            "album": "Encore",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "deezer",
+            "provider_album_id": "album-1"
+          }
+        ]
+      },
+      "safe": false,
+      "expected_source": null
+    },
+    {
+      "name": "version Remix",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Eminem",
+        "album": "Encore",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": ""
+      },
+      "results": {
+        "deezer": [
+          {
+            "title": "Mockingbird (Remix)",
+            "artist": "Eminem",
+            "album": "Encore",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "deezer",
+            "provider_album_id": "album-1"
+          }
+        ]
+      },
+      "safe": false,
+      "expected_source": null
+    },
+    {
+      "name": "version Clean",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Eminem",
+        "album": "Encore",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": ""
+      },
+      "results": {
+        "deezer": [
+          {
+            "title": "Mockingbird (Clean)",
+            "artist": "Eminem",
+            "album": "Encore",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "deezer",
+            "provider_album_id": "album-1"
+          }
+        ]
+      },
+      "safe": false,
+      "expected_source": null
+    },
+    {
+      "name": "version Remastered",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Eminem",
+        "album": "Encore",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": ""
+      },
+      "results": {
+        "deezer": [
+          {
+            "title": "Mockingbird (Remastered)",
+            "artist": "Eminem",
+            "album": "Encore",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "deezer",
+            "provider_album_id": "album-1"
+          }
+        ]
+      },
+      "safe": false,
+      "expected_source": null
+    },
+    {
+      "name": "version Acoustic",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Eminem",
+        "album": "Encore",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": ""
+      },
+      "results": {
+        "deezer": [
+          {
+            "title": "Mockingbird (Acoustic)",
+            "artist": "Eminem",
+            "album": "Encore",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "deezer",
+            "provider_album_id": "album-1"
+          }
+        ]
+      },
+      "safe": false,
+      "expected_source": null
+    },
+    {
+      "name": "Various Artists versus solo",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Eminem",
+        "album": "Encore",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": ""
+      },
+      "results": {
+        "itunes": [
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Encore",
+            "albumartist": "Various Artists",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "itunes",
+            "provider_album_id": "album-1"
+          }
+        ]
+      },
+      "safe": false,
+      "expected_source": null
+    },
+    {
+      "name": "provider artist corruption",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Eminem",
+        "album": "Encore",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": ""
+      },
+      "results": {
+        "itunes": [
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Encore",
+            "albumartist": "Apple Music",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "itunes",
+            "provider_album_id": "album-1"
+          }
+        ]
+      },
+      "safe": false,
+      "expected_source": null
+    },
+    {
+      "name": "single versus album",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Eminem",
+        "album": "Encore",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": ""
+      },
+      "results": {
+        "spotify": [
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Mockingbird - Single",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "spotify",
+            "provider_album_id": "album-1"
+          }
+        ]
+      },
+      "safe": false,
+      "expected_source": null
+    },
+    {
+      "name": "missing album",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Eminem",
+        "album": "",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": ""
+      },
+      "results": {
+        "deezer": [
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Encore",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "deezer",
+            "provider_album_id": "album-1"
+          }
+        ]
+      },
+      "safe": false,
+      "expected_source": null
+    },
+    {
+      "name": "missing tags",
+      "query": {
+        "title": "",
+        "artist": "",
+        "album": "Encore",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": ""
+      },
+      "results": {
+        "deezer": [
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Encore",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "deezer",
+            "provider_album_id": "album-1"
+          }
+        ]
+      },
+      "safe": false,
+      "expected_source": null
+    },
+    {
+      "name": "wrong existing MBID",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Eminem",
+        "album": "Encore",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": "wrong"
+      },
+      "results": {
+        "musicbrainz": [
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Encore",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "other",
+            "source": "musicbrainz",
+            "provider_album_id": "album-1"
+          }
+        ]
+      },
+      "safe": false,
+      "expected_source": null
+    },
+    {
+      "name": "multiple editions",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Eminem",
+        "album": "Encore",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": ""
+      },
+      "results": {
+        "deezer": [
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Encore",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "deezer",
+            "provider_album_id": "album-1"
+          },
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Encore",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "deezer",
+            "provider_album_id": "album-2"
+          }
+        ]
+      },
+      "safe": false,
+      "expected_source": null
+    },
+    {
+      "name": "unicode accent",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Éminem",
+        "album": "Encore",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": ""
+      },
+      "results": {
+        "deezer": [
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Encore",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "deezer",
+            "provider_album_id": "album-1"
+          }
+        ]
+      },
+      "safe": true,
+      "expected_source": "deezer"
+    },
+    {
+      "name": "unverified transliteration",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Эминем",
+        "album": "Encore",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": ""
+      },
+      "results": {
+        "deezer": [
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Encore",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "deezer",
+            "provider_album_id": "album-1"
+          }
+        ]
+      },
+      "safe": false,
+      "expected_source": null
+    },
+    {
+      "name": "featuring punctuation",
+      "query": {
+        "title": "Mockingbird featuring Guest",
+        "artist": "Eminem",
+        "album": "Encore",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": ""
+      },
+      "results": {
+        "deezer": [
+          {
+            "title": "Mockingbird (feat. Guest)",
+            "artist": "Eminem",
+            "album": "Encore",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "deezer",
+            "provider_album_id": "album-1"
+          }
+        ]
+      },
+      "safe": true,
+      "expected_source": "deezer"
+    },
+    {
+      "name": "matching two-disc edition",
+      "query": {
+        "title": "Mockingbird",
+        "artist": "Eminem",
+        "album": "Encore",
+        "albumartist": "Eminem",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": "",
+        "discnumber": "2",
+        "totaldiscs": "2",
+        "tracknumber": "5",
+        "totaltracks": "16"
+      },
+      "results": {
+        "itunes": [
+          {
+            "title": "Mockingbird",
+            "artist": "Eminem",
+            "album": "Encore",
+            "albumartist": "Eminem",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "itunes",
+            "provider_album_id": "album-1",
+            "discnumber": "2",
+            "totaldiscs": "2",
+            "tracknumber": "5",
+            "totaltracks": "16"
+          }
+        ]
+      },
+      "safe": true,
+      "expected_source": "itunes"
+    },
+    {
+      "name": "Japanese exact credits",
+      "query": {
+        "title": "春の歌",
+        "artist": "スピッツ",
+        "album": "スーベニア",
+        "albumartist": "スピッツ",
+        "isrc": "USIR10400624",
+        "duration_ms": 250000,
+        "recording_mbid": ""
+      },
+      "results": {
+        "spotify": [
+          {
+            "title": "春の歌",
+            "artist": "スピッツ",
+            "album": "スーベニア",
+            "albumartist": "スピッツ",
+            "isrc": "USIR10400624",
+            "duration_ms": 250000,
+            "recording_mbid": "",
+            "source": "spotify",
+            "provider_album_id": "album-1"
+          }
+        ]
+      },
+      "safe": true,
+      "expected_source": "spotify"
+    }
+  ]
+}

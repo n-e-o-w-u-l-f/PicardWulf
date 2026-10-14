@@ -35,9 +35,14 @@ def eligible(q, candidate, *, min_score=0.82):
     s, why = score(q, candidate)
     if s < min_score:
         return False, why if why != 'compatible' else 'insufficient score'
-    if similarity(q['artist'], candidate['artist']) < 0.90:
+    from .auto_selection import text_similarity, edition_conflicts, version_markers
+    if edition_conflicts(q,candidate):return False,'edition conflict'
+    if any(version_markers(q.get(k))!=version_markers(candidate.get(k))
+           for k in ('title','album') if q.get(k) and candidate.get(k)):
+        return False,'recording/release version conflict'
+    if text_similarity(q['artist'], candidate['artist']) < 0.90:
         return False, 'artist mismatch'
-    if similarity(q['title'], candidate['title']) < 0.90:
+    if text_similarity(q['title'], candidate['title']) < 0.90:
         return False, 'title mismatch'
     if q.get('album') and candidate.get('album') and similarity(q['album'], candidate['album']) < 0.80:
         return False, 'album mismatch'

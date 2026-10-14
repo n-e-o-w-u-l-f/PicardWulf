@@ -1,5 +1,12 @@
 # Changelog
 
+### 2026-10-14 — v1.0 S3 release ranking (source milestone)
+
+- Add edition/date/region/barcode/track/disc guards, recording/release MBID separation, production snapshot preservation and context-sensitive release-v2 cache keys.
+- Preserve version and credit distinctions, expose matching-point contributions and all sorted alternatives, abstain on missing evidence, and resolve compatible edition ties only with verified distinct sibling-recording consensus.
+- Freeze applied previews and reopen review on later conflicts without replacing tags. Preserve preexisting native release IDs and source-neutral Deezer/Spotify winners.
+- Validate the 41-case curated synthetic corpus (10 correct automatic proposals, 31 abstentions, zero incorrect assignments), unit/Qt regressions and 39k synthetic load. BMAX, full tracklists/unverified transliteration and S4/S5 acceptance remain separately limited. [Evidence](docs/planning/S3-EXECUTION-2026-10-14.md).
+
 ### 2026-10-14 — v1.0 S2 provider policy (source milestone)
 
 - Add explicit provider capabilities/consent, persisted request budgets/cooldowns/circuit state, bounded retries and operator controls. Partial/error responses cannot auto-apply or masquerade as empty successful searches.

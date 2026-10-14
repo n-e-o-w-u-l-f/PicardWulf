@@ -136,4 +136,39 @@ class TestContract(unittest.TestCase):
         api=Api();m={'musicbrainz_releasegroupid':logic.RGID,'albumartist':'Apple Music'}
         plugin._album_guard(api,None,m,{})
         self.assertEqual(m['albumartist'],'Eminem')
+
+    def test_production_snapshot_preserves_edition_and_fixed_decision(self):
+        from types import SimpleNamespace
+        fields={'title':'Mockingbird','artist':'Eminem','album':'Encore',
+                'musicbrainz_albumid':'9f497f21-c32e-42cb-bc3f-7022f43d1b4d',
+                'date':'2004','releasecountry':'DE','barcode':'123','releasecomment':'original',
+                'tracknumber':'5','totaltracks':'16','discnumber':'2','totaldiscs':'2',
+                '~length':250000,'~picardwulf_source':'deezer','~picardwulf_decision':'fixed'}
+        file=SimpleNamespace(metadata=fields,orig_metadata=fields,filename='synthetic.flac')
+        for snapshot in (plugin._file_snapshot(file),plugin._original_file_snapshot(file)):
+            for key,value in fields.items():self.assertEqual(snapshot.get(key),value,key)
+
+    def test_forced_conflict_reopens_review_using_production_snapshot(self):
+        from collections import deque
+        from types import SimpleNamespace
+        import test_auto_selection as fixture
+        file=fixture.DummyFile()
+        q=fixture.Q
+        first=fixture.agg.aggregate(q,{'deezer':[fixture.entry('deezer')]})
+        later=fixture.agg.aggregate(q,{'spotify':[fixture.entry('spotify')]})
+        with fixture.TestAutomaticWriting().with_fake_api():fixture.auto.apply_best_to_file(file,q,first)
+        before=dict(file.metadata)
+        controller=fixture.auto.AutoApplyController.__new__(fixture.auto.AutoApplyController)
+        controller.stopped=False;controller._backup_wait=None;controller._refresh_iterator=None
+        controller.watches={};controller.done=set();controller._round_robin=deque()
+        controller.snapshot_func=plugin._file_snapshot
+        controller.engine=SimpleNamespace(paused=False,schedule_async=lambda *a,**k:True)
+        controller.api=SimpleNamespace(plugin_config={'auto_apply_best':True},logger=Logger())
+        controller.io=SimpleNamespace(results={},invalidate=lambda key:None,read=lambda keys:None)
+        controller.watch(file,plugin._file_snapshot(file),force=True)
+        watch=next(iter(controller.watches.values()))
+        controller.io.results[watch.key]={'payload':later}
+        controller.poll()
+        self.assertEqual(file.metadata['~picardwulf_review'],'LATER_RELEASE_CONFLICT')
+        self.assertEqual({k:v for k,v in file.metadata.items() if k!='~picardwulf_review'},before)
 if __name__=='__main__':unittest.main()

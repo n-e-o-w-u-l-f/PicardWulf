@@ -37,7 +37,7 @@ def proposal_for_auto(q, result):
         raise UnsafeCandidate('Gewinnerdaten fehlen.')
     # Existing recording ID must not be re-credited to an unrelated streaming
     # release. Keep the previous MB assignment for explicit manual review.
-    if q.get('recording_mbid') and candidate.get('source')!='musicbrainz':
+    if (q.get('recording_mbid') or q.get('release_mbid')) and candidate.get('source')!='musicbrainz':
         raise UnsafeCandidate('MusicBrainz-Recording bereits gesetzt; Fremdquelle benötigt Bestätigung.')
     if not candidate.get('album'):
         raise UnsafeCandidate('Release-Album fehlt.')
@@ -51,6 +51,13 @@ def apply_best_to_file(file, q, result, *, save=False, verified_backup=None):
     md=getattr(file,'metadata',None)
     if md is None:
         raise UnsafeCandidate('Keine Picard-Dateimetadaten.')
+    from .auto_selection import decision_identity, MODEL
+    decision_key=decision_identity(candidate)
+    previous=md.get('~picardwulf_decision','')
+    if previous and previous!=decision_key:
+        raise UnsafeCandidate('Späterer Release-Konflikt: feste Entscheidung bleibt erhalten; Prüfung erforderlich.')
+    if previous:
+        raise UnsafeCandidate('Release-Entscheidung bereits angewendet; keine erneute Übernahme.')
     changes=changes_for(md,proposal)
     # Picard may have filled in a native MBID after Add Folder while other
     # providers were still searching. That ID does not describe the selected
@@ -82,6 +89,9 @@ def apply_best_to_file(file, q, result, *, save=False, verified_backup=None):
         # Private/internal Picard fields do not rewrite artist or albumartist.
         md['~picardwulf_source']=candidate['source']
         md['~picardwulf_score']=str(round(100*candidate['release_score'],2))
+        md['~picardwulf_score_kind']='matching_points'
+        md['~picardwulf_model']=MODEL
+        md['~picardwulf_decision']=decision_key
         md['~picardwulf_release']=candidate['album']
         file.update()
         if backup is not None:
@@ -196,6 +206,7 @@ class AutoApplyController:
                 continue
             compatible=dict(current_q)
             compatible['recording_mbid']=watch.query.get('recording_mbid','')
+            compatible['release_mbid']=watch.query.get('release_mbid','')
             if query_key(current_q)!=watch.key and query_key(compatible)!=watch.key:
                 self.watches.pop(identity,None)
                 continue
@@ -207,6 +218,16 @@ class AutoApplyController:
                 self.watches.pop(identity,None)
                 continue
             if current is not None and current.get('~picardwulf_source',''):
+                from .auto_selection import decision_identity
+                decision=result['payload'].get('auto',{})
+                previous=file.metadata.get('~picardwulf_decision','')
+                candidate=decision.get('candidate')
+                if previous and decision.get('state') in ('ready','review','ambiguous','no_match') and (
+                                  decision.get('state')!='ready' or not candidate or
+                                  decision_identity(candidate)!=previous):
+                    file.metadata['~picardwulf_review']='LATER_RELEASE_CONFLICT'
+                    file.update()
+                    self.api.logger.info('PicardWulf: spätere Release-Daten benötigen Prüfung; Entscheidung erhalten.')
                 self.watches.pop(identity,None)
                 continue
             try:
