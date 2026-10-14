@@ -152,6 +152,10 @@ The v1.0 S1 scheduler admits at most **2,048 uncommitted envelopes**, including 
 
 **Status:** Tested on Legion with 10,000 synthetic jobs; real BMAX process health and in-Picard hot-reload remain unverified, and the fix cannot modify code already imported by a running plugin until Picard's plugin manager reloads it.
 
+## All-provider similar albums from Picard 3 context menus (75%+)
+
+PicardWulf v1.0 adds **PicardWulf: Ähnliche Alben aus ALLEN Quellen (ab 75 %)** to right-click menus for album clusters and loaded albums. This is a separate official Picard 3 context action; it does not override the native MusicBrainz-only lookup. It performs bounded asynchronous source-complete comparisons across enabled and authorized providers and presents selectable **release** rows with confidence (>=75%), track coverage (>=75%), provider identity and release ID. One original track contributes at most one vote per provider release; distinct editions are not merged. Selected rows open a no-save track-level review. Provider credentials and quotas still apply. An unknown existing local plugin is never overwritten silently: only -LiveUpdate -AllowUnrecognizedExisting with matching plugin UUID, a second user confirmation, and a full retained rollback directory permits the upgrade.
+
 ## Source-complete comparison for newly added tracks
 
 An album-cache result from a different recording could previously bypass MusicBrainz/Deezer/SoundCloud comparisons. The v1.0 fix checks **all eligible, enabled providers** for each current track, or reuses only the provider's completed checkpoint/cache for the exact query. Last.fm is not silently skipped after a strong MusicBrainz result. Provider quotas, unauthorized states and user pause still apply. This can take longer for a large library without adding concurrent workers. [Proof and remaining runtime gates](docs/planning/V1.0-PROVIDER-COMPLETENESS-2026-10-14.md).

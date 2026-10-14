@@ -84,7 +84,7 @@ class TestBulkBackgroundIngest(unittest.TestCase):
 
     def test_installer_allows_hot_swap_only_after_explicit_user_acknowledgement(self):
         code=(ROOT/'Install-NEOWULF.ps1').read_text(encoding='utf8')
-        self.assertIn('param([switch]$LiveUpdate)',code)
+        self.assertIn('param([switch]$LiveUpdate, [switch]$AllowUnrecognizedExisting)',code)
         self.assertIn('JA-PLUGIN-DEAKTIVIERT',code)
         self.assertIn('if (!$picardRunning)',code)
         self.assertIn("-LiveUpdate",(ROOT/'Install-PicardWulf-Live.cmd').read_text(encoding='utf8'))

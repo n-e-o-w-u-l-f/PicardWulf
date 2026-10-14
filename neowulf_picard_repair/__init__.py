@@ -14,6 +14,7 @@ from picard.script import ScriptParser
 from .universal_engine import UniversalAggregator
 from .auto_apply import AutoApplyController
 from .save_tracking import SaveTracker
+from .cluster_ui import selected_group_files, show_similar_albums
 from .native_ui import show_native_window
 from .credentials import load as load_credentials, save as save_credentials, FIELDS
 from .repair_logic import (
@@ -543,6 +544,20 @@ class TagSaveStatus(BaseAction):
               'Backups werden niemals automatisch überschrieben oder gelöscht.')
 
 
+class SimilarAlbumsAllSources(BaseAction):
+    TITLE = 'PicardWulf: Ähnliche Alben aus ALLEN Quellen (ab 75 %)'
+    MENU = ('PicardWulf',)
+
+    def callback(self, objs):
+        try:
+            files=selected_group_files(objs)
+            show_similar_albums(self.api,_get_engine(),files,_file_snapshot)
+        except Exception as exc:
+            self.api.logger.warning('PicardWulf multi-provider album comparison: %s',
+                                    type(exc).__name__)
+            _show('PicardWulf – Albumsuche',str(exc),'warning')
+
+
 class NativeReview(BaseAction):
     TITLE = 'Album-Matching & Tags überschreiben (mit Backup)'
     MENU = ('PicardWulf',)
@@ -652,6 +667,8 @@ def enable(api):
     api.register_tools_menu_action(SearchPauseAction)
     api.register_tools_menu_action(TagSaveStatus)
     api.register_tools_menu_action(RestoreAudioCopy)
+    api.register_cluster_action(SimilarAlbumsAllSources)
+    api.register_album_action(SimilarAlbumsAllSources)
     api.register_tools_menu_action(NativeReview)
     api.register_file_action(SelectedFileReview)
     api.register_tools_menu_action(AutoApplyToggle)

@@ -1,4 +1,4 @@
-param([switch]$LiveUpdate)
+param([switch]$LiveUpdate, [switch]$AllowUnrecognizedExisting)
 # PicardWulf 1.0 – filesystem plugin installation without picard-cli.exe.
 # Source-of-truth: Picard 3 picard/const/appdirs.py (plugin_folder),
 # picard/tagger.py (manager.add_directory) and plugin3/manager/__init__.py.
@@ -32,7 +32,7 @@ if ($picardRunning) {
     }
 }
 $source = Join-Path $PSScriptRoot 'neowulf_picard_repair'
-$required = @('__init__.py', 'MANIFEST.toml', 'repair_logic.py', 'universal_engine.py', 'universal_adapters.py', 'credentials.py', 'native_workflow.py', 'native_ui.py', 'auto_selection.py', 'auto_apply.py', 'background_io.py', 'provider_policy.py', 'save_tracking.py')
+$required = @('__init__.py', 'MANIFEST.toml', 'repair_logic.py', 'universal_engine.py', 'universal_adapters.py', 'credentials.py', 'native_workflow.py', 'native_ui.py', 'auto_selection.py', 'auto_apply.py', 'background_io.py', 'provider_policy.py', 'save_tracking.py', 'cluster_matching.py', 'cluster_ui.py')
 foreach ($item in $required) {
     if (!(Test-Path -LiteralPath (Join-Path $source $item) -PathType Leaf)) {
         Stop-Install "Paket unvollstaendig: $item"
@@ -146,7 +146,31 @@ if (Test-Path -LiteralPath $target) {
     elseif (Matches-Known-V3 $target) { $mode = 'upgrade_v3' }
     elseif (Matches-Known-V1 $target) { $mode = 'upgrade_v1' }
     elseif (Matches-Known-V2 $target) { $mode = 'upgrade_v2' }
-    else { Stop-Install "Pluginordner hat unbekannte lokale Aenderungen; sicherheitshalber NICHT ueberschrieben: $target" }
+    elseif ($AllowUnrecognizedExisting) {
+        # Unknown local revisions are never discarded. Only explicitly
+        # approved copies of THIS plugin UUID may be upgraded, with a full
+        # retained rollback directory and independent confirmation.
+        $installedManifest = Join-Path $target 'MANIFEST.toml'
+        if (!(Test-Path -LiteralPath $installedManifest -PathType Leaf)) {
+            Stop-Install "Unbekannte Installation ohne Pluginidentitaet: $target"
+        }
+        $installedText = Get-Content -LiteralPath $installedManifest -Raw -Encoding UTF8
+        if ($installedText -notmatch 'uuid\s*=\s*"cf3c909b-eccb-4b89-90e3-55eb68e0176c"') {
+            Stop-Install "Unbekannte Pluginidentitaet. Keine Aenderung: $target"
+        }
+        $targetItem = Get-Item -LiteralPath $target -ErrorAction Stop
+        if (($targetItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+            Stop-Install "Pluginordner ist eine Verknuepfung/Junction. Keine Aenderung: $target"
+        }
+        Write-Host 'UNBEKANNTE LOKALE VERSION: Der gesamte bisherige Pluginordner wird vor dem Upgrade als Rollback bewahrt.' -ForegroundColor Yellow
+        Write-Host 'Lokale Python-Aenderungen werden NICHT in die neue Version uebernommen; das unveraenderte Backup bleibt erhalten.' -ForegroundColor Yellow
+        $approval = Read-Host 'Nur wenn PicardWulf DEAKTIVIERT ist: JA-PLUGIN-SICHERN-UND-ERSETZEN'
+        if ($approval -cne 'JA-PLUGIN-SICHERN-UND-ERSETZEN') {
+            Stop-Install 'Unbekannte Pluginversion nicht zum gesicherten Upgrade freigegeben.'
+        }
+        $mode = 'upgrade_unrecognized'
+    }
+    else { Stop-Install "Pluginordner hat unbekannte lokale Aenderungen; sicherheitshalber NICHT ueberschrieben: $target. Fuer ein GESICHERTES Upgrade explizit -AllowUnrecognizedExisting benutzen." }
 }
 if ($mode -eq 'already_current') {
     Write-Host "PicardWulf v1.0 bereits vorhanden: $target" -ForegroundColor Green
@@ -158,7 +182,7 @@ if ($mode -eq 'already_current') {
     try {
         Copy-Item -LiteralPath $source -Destination $stage -Recurse -ErrorAction Stop
         if (!(Files-Match $source $stage)) { throw 'Integritaetspruefung fehlgeschlagen.' }
-        if ($mode -in @('upgrade_v2', 'upgrade_v3', 'upgrade_v1')) {
+        if ($mode -in @('upgrade_v2', 'upgrade_v3', 'upgrade_v1', 'upgrade_unrecognized')) {
             # Picard ignores dot-prefixed directories; leave the full previous
             # release as a retained rollback point, never delete it.
             $backup = Join-Path $pluginRoot ('.picardwulf-backup-' + $mode + '-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N'))

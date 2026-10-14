@@ -28,6 +28,13 @@
 
 All changes below belong to the **same v1.0 development target**. A completed local fix is a development milestone, not a new product release. The version remains v1.0 until all release acceptance criteria have been met.
 
+### 2026-10-14 — Source-neutral 75% similar album context lookup and safe unknown-version upgrade
+
+- Register Picard 3 album/cluster context actions for all enabled authorized provider searches and rank selectable release suggestions with >=75% confidence and >=75% track coverage.
+- Keep MusicBrainz/Deezer/SoundCloud/Spotify/Last.fm/Apple release identities separate, without invented MusicBrainz IDs or automatic audio writes. Search respects provider credentials, quotas and SQLite work limits.
+- Explicit -AllowUnrecognizedExisting allows UUID-verified prior plugin with a second approval and FULL retained rollback directory, not silent overwriting.
+- Unit and real Qt offscreen dialog tests passed; BMAX live deployment and authenticated provider acceptance remain unverified. Target is v1.0.
+
 ### 2026-10-14 — Fix skipped provider comparisons for newly imported tracks
 
 - Corrected an early return: a strong match in an album-local cache was not proof that each enabled provider had been consulted for this newly imported recording.

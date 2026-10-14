@@ -74,6 +74,8 @@ class Api:
         self.registered=[]
     def register_tools_menu_action(self,cls):self.registered.append(('tools',cls))
     def register_file_action(self,cls):self.registered.append(('file_action',cls))
+    def register_cluster_action(self,cls):self.registered.append(('cluster_action',cls))
+    def register_album_action(self,cls):self.registered.append(('album_action',cls))
     def register_album_metadata_processor(self,fn,priority):self.registered.append(('processor',fn,priority))
     def register_file_post_load_processor(self,fn,priority=0):self.registered.append(('file_event',fn,priority))
     def register_file_post_save_processor(self,fn,priority=0):self.registered.append(('file_saved_event',fn,priority))
@@ -89,7 +91,7 @@ class TestContract(unittest.TestCase):
         before=api.global_config.setting['file_renaming_scripts']['a']['script']
         with patch.object(plugin,'AutoApplyController'), patch.object(plugin,'UniversalAggregator'):
             plugin.enable(api)
-        self.assertEqual(len(api.registered),18)
+        self.assertEqual(len(api.registered),20)
         self.assertEqual(sum(x[0]=='file_saved_event' for x in api.registered),1)
         self.assertTrue(api.plugin_config['auto_apply_best'])
         self.assertFalse(api.plugin_config['auto_save_with_backup'])
@@ -104,6 +106,16 @@ class TestContract(unittest.TestCase):
         with patch.object(plugin._save_tracker,'post_save',return_value=True) as saved:
             events[0][1](api,witness)
         saved.assert_called_once_with(witness)
+
+    def test_context_menu_registers_album_and_cluster_multisource_action(self):
+        api=Api()
+        with patch.object(plugin,'AutoApplyController'), patch.object(plugin,'UniversalAggregator'):
+            plugin.enable(api)
+        contexts=[entry for entry in api.registered
+                  if entry[0] in ('album_action','cluster_action')]
+        self.assertEqual({entry[0] for entry in contexts},
+                         {'album_action','cluster_action'})
+        self.assertTrue(all('75 %' in entry[1].TITLE for entry in contexts))
 
     def test_repair_declined_changes_nothing(self):
         api=Api();act=plugin.Repair();act.api=api

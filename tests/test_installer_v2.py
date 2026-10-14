@@ -34,6 +34,16 @@ class TestInstallerV2(unittest.TestCase):
         self.assertNotIn('Get-FileHash', self.ps)
         self.assertIn('Move-Item -LiteralPath $stage -Destination $target', self.ps)
 
+    def test_unrecognized_local_plugin_requires_manual_full_backup(self):
+        self.assertIn('$AllowUnrecognizedExisting',self.ps)
+        self.assertIn('JA-PLUGIN-SICHERN-UND-ERSETZEN',self.ps)
+        self.assertIn('upgrade_unrecognized',self.ps)
+        self.assertIn('MANIFEST.toml',self.ps)
+        self.assertIn('cf3c909b-eccb-4b89-90e3-55eb68e0176c',self.ps)
+        self.assertIn('Move-Item -LiteralPath $target -Destination $backup',self.ps)
+        self.assertIn('Move-Item -LiteralPath $backup -Destination $target',self.ps)
+        self.assertIn('ReparsePoint',self.ps)
+
     def test_no_config_mutation(self):
         self.assertNotIn('Set-Content', self.ps)
         self.assertNotIn('Add-Content', self.ps)
@@ -46,6 +56,13 @@ class TestInstallerV2(unittest.TestCase):
     def test_activation_is_explicit(self):
         self.assertIn('Aktivieren', self.ps)
         self.assertIn('GUI', self.ps)
+
+    def test_explicit_unknown_version_upgrade_cmd_uses_guards(self):
+        cmd=(ROOT/'Install-PicardWulf-Live-Safe-Upgrade.cmd').read_text(encoding='utf8')
+        self.assertIn('Install-NEOWULF.ps1',cmd)
+        self.assertIn('-LiveUpdate -AllowUnrecognizedExisting',cmd)
+        self.assertIn('ERRORLEVEL',cmd)
+        self.assertIn('JA-PLUGIN-SICHERN-UND-ERSETZEN',self.ps)
 
     def test_cmd_entrypoint(self):
         self.assertIn('Install-NEOWULF.ps1', self.cmd)

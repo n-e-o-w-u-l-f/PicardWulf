@@ -96,6 +96,15 @@ Updated: 2026-10-14 · Project: `n-e-o-w-u-l-f/PicardWulf`
 - Existing downloaded archive on BMAX contains the old script and must be refreshed from the new verified GitHub commit. No process restart, provider key change or music-file modification.
 - Next: authenticated actual BMAX installer rerun with only PicardWulf disabled, Picard open, consent; validate installed plugin and API provider statuses before stable v1.0 release.
 
+## PicardWulf v1.0 multi-source album context search and guarded local upgrade — 2026-10-14
+
+- Requested behavior: right-click an album group on left OR a matched album on right, run **PicardWulf: Ähnliche Alben aus ALLEN Quellen (ab 75 %)**; all enabled and authorized sources compete, not just MusicBrainz. This is a separate official Picard 3 plugin action rather than an unsupported override of Picard's built-in lookup.
+- New source modules: cluster_matching.py (source-neutral release-level matches with >=75% confidence AND >=75% track coverage, one hit per original track, edition and provider release-ID isolation) and cluster_ui.py (asynchronous SQLite result delivery and bounded 200-track GUI dialog). Selected hit can be inspected without automatic writing.
+- Official API: register_cluster_action() and register_album_action() per https://github.com/metabrainz/picard/blob/master/docs/PLUGINSV3/API.md.
+- New installer failure fingerprint: BMAX-B6 as megal, Picard running, previously installed neowulf_picard_repair directory unknown hash/source files. Existing strict allowlist correctly halted; do NOT silently overwrite. A gated -AllowUnrecognizedExisting path now demands valid MANIFEST UUID and non-reparse target, explicit second confirmation JA-PLUGIN-SICHERN-UND-ERSETZEN, and retains FULL original plugin directory in rollback folder. Existing live-plugin-disabled confirmation remains required.
+- Verified: 212 local unit tests PASS and real Qt offscreen context dialog probe PASS (two release choices, Deezer first, both forced asynchronous queries). **Not yet verified on BMAX**: actual plugin loaded and current API provider auth. Tailscale BMAX port reachable but remote authenticated operation blocked by platform; RDC remaining quota 0; no audio originals changed.
+- Installation requires an updated full archive (two new .py modules), not just the installer PS1. Version target remains v1.0; no stable tag before actual BMAX S5 acceptance.
+
 ## Next safe actions
 
 ### S1 source checkpoint — 2026-10-14
