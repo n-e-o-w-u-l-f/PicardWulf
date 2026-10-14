@@ -251,7 +251,7 @@ class SourceStatus(BaseAction):
         _show('NEOWULF Universal Metadata',
             (lines or 'Anbietersteuerung wird im Hintergrund initialisiert.')+'\n\n'
             f'Geplant: {st["queued"]} · Eingangs-Puffer: {st["staging"]} · Ausstehend: {st["backlog"]} · In Arbeit: {st["pending"]} · Fehlgeschlagen: {st["failed"]} · Pause: {st["paused"]}\n'
-            f'Großer Rückstand beim Start: {st["auto_paused_backlog"]}\n\n'
+            f'Großer Rückstand erkannt: {st["large_backlog_detected"]} (Warnung, keine automatische Pause)\n\n'
             f'Bestätigt verarbeitet: {st["committed"]} · Wiederholen: {st["retry"]}\n'
             f'Rückstau: {st["backpressure"]} · Datenbankfehler: {st["db_error"] or "keiner"}\n'
             'Eingangs-Puffer ist noch NICHT dauerhaft; Überlauf wartet in Picard.\n'

@@ -21,12 +21,21 @@
 
 All changes below belong to the **same v1.0 development target**. A completed local fix is a development milestone, not a new product release. The version remains v1.0 until all release acceptance criteria have been met.
 
+### 2026-10-14 — Full source metadata and provider access
+
+- Public Deezer detail enrichment for one strong match: track/album endpoints with a shared quota and strict numeric URL allowlist; collect ISRC, track/disc numbers, label, barcode, album artist and dates where available; no artwork cached.
+- Extend provider candidate/tag proposals with real track numbers, totals, release dates, label, genre, composer and barcode; preserve curated user fields automatically and never forge an external MusicBrainz ID.
+- Add inverse ranking regression: MusicBrainz can win over Deezer just as Deezer may win over MusicBrainz. Contradictory details veto automatic acceptance.
+- Correct unwanted auto-pause when backlog exceeds 2,000 entries: it is now a visible warning, while explicit user pause remains authoritative and provider requests are still bounded.
+- Invalidate prior full-metadata result/album cache keys to prevent replaying old incomplete adapter results. No BMAX running session changed.
+- Public providers verified from Legion; SoundCloud/Spotify/Last.fm app credentials require user-specific registration/eligibility; no purchase attempted. See docs/planning/V1.0-PROVIDER-ACCESS.md.
+
 ### 2026-10-14 — Bulk-import responsiveness and live plugin update
 
 - Removed per-file SQLite read/write from the Picard file-load and bulk-refresh GUI hooks; work is batched and durably enqueued by a dedicated writer thread.
 - Added bounded, fair GUI result polling with one batch SQLite read instead of up to 24 individual database opens per timer tick.
 - Added pause/resume for metadata provider requests without terminating Picard. Pause state is saved in plugin config, and unfinished database backlog remains durable.
-- Automatically pause an existing backlog above 2,000 jobs at plugin re-enable to avoid immediate large-scale requests after a live update.
+- The previous large-backlog auto-pause has been superseded by the warning-only behavior described above.
 - Added `Install-PicardWulf-Live.cmd` requiring explicit operator confirmation that PicardWulf is disabled before changing any plugin files; does not terminate or restart the running Picard process.
 - Stress-tested 10,000 synthetic imported tracks and durable SQLite recovery, in addition to preexisting tests.
 - **Not a claim of live repair:** no executable BMAX remote-control session is available; user-session GUI health and hot-reload still need direct confirmation.

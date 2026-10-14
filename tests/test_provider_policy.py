@@ -200,7 +200,7 @@ class ProviderPolicyTests(unittest.TestCase):
                     with self.assertRaises(engine.ProviderError):
                         client.request('deezer','https://api.deezer.com/search',{})
 
-    def test_deezer_never_caches_artwork_and_known_album_skips_lastfm_enrichment(self):
+    def test_deezer_no_artwork_and_lastfm_enriches_known_album(self):
         result=adapters.deezer(Q,lambda *a,**k:{'data':[{'title':'Track','artist':{'name':'Synthetic'},
             'album':{'title':'Album','cover':'https://private.invalid/image'},'duration':'123'}]}, {})
         self.assertNotIn('image',repr(result))
@@ -210,7 +210,7 @@ class ProviderPolicyTests(unittest.TestCase):
             calls.append(args[2]['method'])
             return {'results':{'trackmatches':{'track':[{'name':'Track','artist':'Synthetic'}]}}}
         adapters.lastfm(Q,request,{'lastfm_api_key':'synthetic-key'})
-        self.assertEqual(calls,['track.search'])
+        self.assertEqual(calls,['track.search','track.getInfo'])
 
     def test_uncertain_refresh_is_never_reused_or_persisted_plaintext(self):
         credentials={'soundcloud_client_id':'id','soundcloud_client_secret':'secret',

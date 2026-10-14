@@ -61,6 +61,16 @@ Updated: 2026-10-14 · Project: `n-e-o-w-u-l-f/PicardWulf`
 - 119 existing tests and target-version regression are baseline; **BMAX 29k+10k runtime acceptance still OPEN**.
 - Research made no BMAX process changes, no media modifications, no paid API purchases, no user-secret uploads.
 
+## Full metadata & provider registration checkpoint — 2026-10-14
+
+- Target stays v1.0. Read-only Legion public probes: MusicBrainz, Deezer, Apple all AVAILABLE. A real matched Deezer track+album showed all available core fields; API responses and account rights from BMAX remain unverified.
+- Full official-detail Deezer enrichment now shares Deezer rate/quota bucket; complete candidate fields map to Picard in-memory tags, with MBID, albumartist, release and manual-edit protection. 158 local mocks/regressions passed (before final documentation validation).
+- Previous unrequested >2,000-backlog pause is now a warning only; persisted explicit pause is still honored. New cache keys prevent replay of old incomplete candidate data.
+- BMAX reached by Tailscale but SSH key login to the tested local accounts was denied. No Picard termination, no BMAX data changes.
+- New SoundCloud client credentials currently require Artist Pro; Spotify Development requires Premium. Last.fm requires personal app registration. No extra cost authorized, no keys invented. All account-dependent runtime gates OPEN.
+- Registration instructions, source-backed eligibility and operational acceptance: [provider guide](docs/planning/V1.0-PROVIDER-ACCESS.md).
+- NEXT: verified BMAX user-session plugin activation, provider status and legitimate credentials; no stable release label before actual save/restore and 29k+10k UI tests.
+
 ## Next safe actions
 
 ### S1 source checkpoint — 2026-10-14

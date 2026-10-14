@@ -33,6 +33,8 @@ _ALLOWED = {
     'musicbrainz': ('musicbrainz.org','/ws/2/recording/'),
     'musicbrainz_lookup': ('musicbrainz.org','/ws/2/recording/'),
     'deezer': ('api.deezer.com','/search'),
+    'deezer_track': ('api.deezer.com','/track/'),
+    'deezer_album': ('api.deezer.com','/album/'),
     'itunes': ('itunes.apple.com','/search'),
     'spotify_auth': ('accounts.spotify.com','/api/token'),
     'spotify': ('api.spotify.com','/v1/search'),
@@ -40,7 +42,7 @@ _ALLOWED = {
     'soundcloud_auth': ('secure.soundcloud.com','/oauth/token'),
     'lastfm': ('ws.audioscrobbler.com','/2.0/'),
 }
-MIN_DELAY = {'musicbrainz':1.15,'musicbrainz_lookup':1.15,'deezer':1.4,'itunes':3.2,'spotify_auth':1.,
+MIN_DELAY = {'musicbrainz':1.15,'musicbrainz_lookup':1.15,'deezer':1.4,'deezer_track':1.4,'deezer_album':1.4,'itunes':3.2,'spotify_auth':1.,
              'spotify':1.0,'soundcloud':1.1,'lastfm':1.1}
 MIN_DELAY['soundcloud_auth']=900.
 
@@ -72,11 +74,15 @@ def clean_track(metadata):
     return {'title':title[:220], 'artist':artist[:220], 'album':one(g('album'))[:220],
             'albumartist':one(g('albumartist'))[:220], 'isrc':one(g('isrc')).upper(),
             'recording_mbid':one(g('musicbrainz_recordingid')).lower(),
-            'duration_ms':dura(), 'inferred_filename':bool(one(g('inferred_filename')))}
+            'duration_ms':dura(), 'inferred_filename':bool(one(g('inferred_filename'))),
+            'tracknumber':one(g('tracknumber')), 'discnumber':one(g('discnumber')),
+            'date':one(g('date')), 'genre':one(g('genre')), 'label':one(g('label')),
+            'barcode':one(g('barcode')), 'composer':one(g('composer')),
+            'totaltracks':one(g('totaltracks')), 'totaldiscs':one(g('totaldiscs'))}
 
 
 def query_key(q):
-    s='picardwulf-crosssource-v1|'+ '|'.join(norm(q.get(k,'')) for k in ('title','artist','album','isrc','recording_mbid'))
+    s='picardwulf-v1-fulltrack-20261014|'+ '|'.join(norm(q.get(k,'')) for k in ('title','artist','album','isrc','recording_mbid'))
     return hashlib.sha256(s.encode('utf-8')).hexdigest()
 
 
@@ -144,10 +150,14 @@ class HTTPClient:
         if source=='musicbrainz_lookup':
             if not re.fullmatch(r'/ws/2/recording/[0-9a-fA-F-]{36}',parsed.path):
                 raise ValueError('provider lookup endpoint not allowed')
+        elif source in ('deezer_track','deezer_album'):
+            if not re.fullmatch(re.escape(path)+r'[1-9][0-9]{0,15}',parsed.path):
+                raise ValueError('provider detail endpoint not allowed')
         elif parsed.path!=path:
             raise ValueError('provider endpoint not allowed')
-        # Backoff per provider; bounded work; no repeated 429 retries.
-        rate_bucket = 'musicbrainz' if source == 'musicbrainz_lookup' else source
+        # Subrequests consume the same rate/quota budget as parent searches.
+        rate_bucket = ('musicbrainz' if source == 'musicbrainz_lookup' else
+                       'deezer' if source in ('deezer_track','deezer_album') else source)
         with self._lock:
             now=time.monotonic()
             start=max(now,self._last.get(rate_bucket,0)+MIN_DELAY[source],self._cooldown.get(rate_bucket,0))
@@ -546,7 +556,8 @@ class UniversalAggregator:
         self.pending = set()
         self.stopped = False
         self.paused = bool(paused)
-        self.auto_paused_backlog = False
+        self.auto_paused_backlog = False  # legacy status key; no forced pause
+        self.large_backlog_detected = False
         self.failed_count = self.queued_count = self.committed_count = 0
         self._counts = {'queued':0, 'running':0, 'retry':0, 'failed':0}
         self.db_error = ''
@@ -625,8 +636,11 @@ class UniversalAggregator:
             self.policy=PolicyClient(self.store,self.http,self.credentials,self.provider_options,self.provider_delays,
                                      stopped=lambda:self.stopped)
             self._counts = self.store.state_counts()
-            self.auto_paused_backlog = sum(self._counts.values()) > 2000
-            self.paused = self.paused or self.auto_paused_backlog
+            self.large_backlog_detected = sum(self._counts.values()) > 2000
+            # Asynchronous storage, provider-specific budgets and a two-task
+            # worker cap now protect the GUI. Don't strand a 2k+ backlog
+            # behind an unrequested automatic pause. An explicit persisted
+            # operator pause (self.paused) must still be respected.
             self._ready.set()
             while True:
                 self._ingest_event.wait(self._pace)
@@ -957,6 +971,7 @@ class UniversalAggregator:
             return {'queued':self.queued_count, 'committed':self.committed_count,
                     'pending':len(self.pending), 'failed':self._counts['failed'],
                     'paused':self.paused, 'auto_paused_backlog':self.auto_paused_backlog,
+                    'large_backlog_detected':self.large_backlog_detected,
                     'staging':len(self._ingest_seen), 'capacity':self.capacity,
                     'batch_size':self.batch_size, 'batch_seconds':self._batch_seconds,
                     'pacing_seconds':self._pace,

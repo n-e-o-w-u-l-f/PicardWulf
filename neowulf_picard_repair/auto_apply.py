@@ -42,6 +42,20 @@ def proposal_for_auto(q, result):
     if not candidate.get('album'):
         raise UnsafeCandidate('Release-Album fehlt.')
     proposal=tag_proposal(q,candidate)
+    # Existing disc/track position may describe a different edition. A
+    # competing provider can STILL win ranking; conflicting positions require
+    # human review instead of silent auto-application.
+    for key in ('tracknumber','discnumber'):
+        original=str(q.get(key) or '').strip()
+        proposed=proposal.get(key,'')
+        if original and proposed and original!=proposed:
+            raise UnsafeCandidate('Widersprüchliche %s – Edition manuell prüfen.' % key)
+    # Do not erase/overwrite locally curated optional fields merely because
+    # a catalogue has a different genre, label or composer spelling.
+    for key in ('genre','label','composer','barcode','date','originaldate'):
+        original=str(q.get(key) or '').strip()
+        if original and key in proposal and original.casefold()!=str(proposal[key]).casefold():
+            proposal.pop(key)
     return candidate,proposal
 
 

@@ -32,6 +32,8 @@ def eligible(q, candidate, *, min_score=0.82):
     """Reject identifier collisions, wrong artists/titles and provenance-as-artist."""
     if norm(candidate.get('artist')) in INVALID_ARTISTS or norm(candidate.get('albumartist')) in INVALID_ARTISTS:
         return False, 'provider in artist field'
+    if candidate.get('enrichment_status') in ('CONFLICT','ALBUM_CONFLICT'):
+        return False, 'provider detail contradicts candidate'
     s, why = score(q, candidate)
     if s < min_score:
         return False, why if why != 'compatible' else 'insufficient score'
@@ -81,6 +83,14 @@ def tag_proposal(q, candidate):
              norm(src_albumartist) == norm(candidate['artist']) and
              is_uuid(candidate.get('release_mbid')))):
             new['albumartist'] = src_albumartist
+        elif candidate.get('source') != 'musicbrainz' and (
+            norm(src_albumartist) == norm(existing) or
+            (not existing and norm(src_albumartist) == norm(candidate['artist'])
+             and norm(src_albumartist) != 'various artists')):
+            # Apply an independently catalogued album artist only where it is
+            # compatible with existing credits; never turn solo releases into
+            # Various Artists or a platform name.
+            new['albumartist'] = src_albumartist
     elif existing:
         pass
     elif norm(candidate['artist']) != 'various artists':
@@ -96,6 +106,26 @@ def tag_proposal(q, candidate):
             new['musicbrainz_recordingid'] = one(candidate['recording_mbid'])
         if is_uuid(candidate.get('release_mbid')):
             new['musicbrainz_albumid'] = one(candidate['release_mbid'])
+    # Preserve the provider's actually returned track/release metadata.
+    # These are *ordinary Picard tags*, never invented recording or release IDs.
+    # Unknown or incomplete values are not used to erase existing tags.
+    for key in ('tracknumber','discnumber','totaltracks','totaldiscs'):
+        raw=one(candidate.get(key))
+        if raw.isascii() and raw.isdigit() and 0 < int(raw) < (10000 if key=='totaltracks' else 1000):
+            new[key]=str(int(raw))
+    date=one(candidate.get('release_date'))
+    if re.fullmatch(r'(?:19|20|21)\d\d(?:-(?:0[1-9]|1[0-2])(?:-(?:0[1-9]|[12]\d|3[01]))?)?',date):
+        new['date']=date
+    original=one(candidate.get('originaldate'))
+    if re.fullmatch(r'(?:19|20|21)\d\d(?:-(?:0[1-9]|1[0-2])(?:-(?:0[1-9]|[12]\d|3[01]))?)?',original):
+        new['originaldate']=original
+    for key in ('genre','label','composer'):
+        value=one(candidate.get(key))
+        if value and norm(value) not in INVALID_ARTISTS:
+            new[key]=value
+    barcode=one(candidate.get('barcode'))
+    if re.fullmatch(r'\d{8}|\d{12,14}',barcode):
+        new['barcode']=barcode
     # No source_name or external provider URL is EVER mapped into an artist tag.
     return new
 

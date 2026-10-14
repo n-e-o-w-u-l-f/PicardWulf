@@ -30,6 +30,8 @@ def source_neutral_score(q, candidate):
     """0–1 fit: no MusicBrainz preference or non-comparable provider trust boost."""
     if not candidate.get('source') or not candidate.get('artist') or not candidate.get('title'):
         return 0.0
+    if candidate.get('enrichment_status') in ('CONFLICT','ALBUM_CONFLICT'):
+        return 0.0
     if norm(candidate.get('artist')) in EXTERNAL_PROVIDER_NAMES:
         return 0.0
     if norm(candidate.get('albumartist')) in EXTERNAL_PROVIDER_NAMES:

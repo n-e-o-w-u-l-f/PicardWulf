@@ -35,11 +35,20 @@ class TestQueue(unittest.TestCase):
             e=engine.UniversalAggregator(store=engine.ResultStore(p),transport=FastTransport(),credentials={},
                 provider_delays={s:0 for s in engine.SOURCES})
             try:
-                for _ in range(300):
-                    if s.job_count()==0:break
+                # job_count() is queued-only. At zero, the last job may
+                # still be RUNNING with its result not yet committed.
+                # Use the real acceptance condition: 115 durably saved
+                # results AND no queued/running/retry jobs.
+                deadline=time.monotonic()+15
+                while time.monotonic()<deadline:
+                    state=s.state_counts()
+                    if (len(s.recent(200))==115
+                        and not any(state.get(name,0) for name in ('queued','running','retry'))):
+                        break
                     time.sleep(.025)
-                self.assertEqual(s.job_count(),0,'persistent jobs not drained')
-                self.assertEqual(len(s.recent(200)),115)
+                self.assertEqual(len(s.recent(200)),115,'all 115 results must be persisted')
+                state=s.state_counts()
+                self.assertEqual(sum(state.get(name,0) for name in ('queued','running','retry')),0)
                 self.assertEqual(e.status()['failed'],0)
             finally:
                 e.stop()
