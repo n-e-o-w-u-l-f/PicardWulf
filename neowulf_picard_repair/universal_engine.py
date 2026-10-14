@@ -830,21 +830,13 @@ class UniversalAggregator:
         from .auto_selection import consensus_cache_key
         evidence_key=consensus_cache_key(q)
         album_evidence=self.store.get_response(evidence_key) or [] if evidence_key else []
-        checkpoints_complete=all(entry.get('status') in ('ok','cached','COMPLETE') for entry in progress.values())
-        if pool and checkpoints_complete and not self.provider_options.get('exhaustive',False):
-            reusable={}
-            for candidate in pool:
-                src=candidate.get('source')
-                if src not in SOURCES or capability(src,self.credentials,self.provider_options)['state']!='AVAILABLE':continue
-                if norm(candidate.get('title'))==norm(q['title']) and score(q,candidate)[0]>=.93:
-                    reusable.setdefault(src,[]).append(candidate)
-            local=aggregate(q,reusable)
-            if local['auto']['state']=='ready':
-                local.update(status={src:'album_cache' if src in reusable else 'local_match_no_query' for src in SOURCES},
-                    capabilities={src:dict(capability(src,self.credentials,self.provider_options),
-                        reason='album_cache' if src in reusable else 'strong_local_match_no_query') for src in SOURCES},
-                    queried_sources=0,completion='LOCAL_CACHE')
-                return local,q
+        # IMPORTANT: the album-local pool is only supporting evidence. A
+        # sibling's Deezer (or MusicBrainz) result is not proof that every
+        # *eligible* provider was checked for the newly imported file.
+        # Source-specific response caching below still avoids repeated HTTP
+        # calls for the same canonical track. Never report a complete result
+        # until each eligible provider is checked, cached or explicitly
+        # unavailable, and per-provider quota/retry states are honored.
         for source in SOURCES:
             if self.stopped:return None,q
             cap=capability(source,self.credentials,self.provider_options)
@@ -872,15 +864,11 @@ class UniversalAggregator:
                     statuses[source]=state
                     cap.update(state=state,reason='persisted_backoff',observed=True)
                     continue
-            # A newly found strong MusicBrainz result is not a reason to
-            # skip higher-scoring streaming catalogues. Only proven cached
-            # complete decisions take the local-first shortcut above.
-            if source=='lastfm' and q.get('album') and source_results and not force and not (
-                    self.provider_options.get('exhaustive',False)):
-                if aggregate(q,source_results)['auto']['state']=='ready':
-                    statuses[source]='enrichment_not_needed'
-                    cap.update(reason='known_album_strong_sources_no_enrichment_needed')
-                    continue
+            # Every enabled, credentialed source competes with MusicBrainz
+            # and the others. A high-scoring early candidate may NOT suppress
+            # Last.fm or any other eligible provider. The user can explicitly
+            # disable a source in provider options; quota/retry and cached
+            # checkpoints are still authoritative.
             if not self.store.checkpoint(key,revision,source,None,'running',attempts):return None,q
             cache_id=hashlib.sha256((source+'|'+key).encode()).hexdigest()
             cached=None if force else self.store.get_response(cache_id)

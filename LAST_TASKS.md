@@ -71,6 +71,13 @@ Updated: 2026-10-14 · Project: `n-e-o-w-u-l-f/PicardWulf`
 - Registration instructions, source-backed eligibility and operational acceptance: [provider guide](docs/planning/V1.0-PROVIDER-ACCESS.md).
 - NEXT: verified BMAX user-session plugin activation, provider status and legitimate credentials; no stable release label before actual save/restore and 29k+10k UI tests.
 
+## v1.0 provider completeness repair — 2026-10-14
+
+- Reproduced RED: strong sibling album-pool match could return LOCAL_CACHE with zero provider calls because an empty checkpoint list passed the completed check. Separate early-exit skipped Last.fm after a good prior source.
+- Fixed: all eligible provider lookups occur, or exact-query provider cache/checkpoint is reused; quotas and persisted retries are maintained. Source-neutral ranking, edition guards and private metadata remain intact.
+- Four synthetic regressions, 180 local tests PASS. See [provider completeness](docs/planning/V1.0-PROVIDER-COMPLETENESS-2026-10-14.md).
+- No BMAX changes; authentic SoundCloud/Spotify/Last.fm developer credentials and S4/S5 Windows runtime acceptance remain OPEN. Target is v1.0 only.
+
 ## Next safe actions
 
 ### S1 source checkpoint — 2026-10-14

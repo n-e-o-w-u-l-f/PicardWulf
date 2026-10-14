@@ -152,6 +152,10 @@ The v1.0 S1 scheduler admits at most **2,048 uncommitted envelopes**, including 
 
 **Status:** Tested on Legion with 10,000 synthetic jobs; real BMAX process health and in-Picard hot-reload remain unverified, and the fix cannot modify code already imported by a running plugin until Picard's plugin manager reloads it.
 
+## Source-complete comparison for newly added tracks
+
+An album-cache result from a different recording could previously bypass MusicBrainz/Deezer/SoundCloud comparisons. The v1.0 fix checks **all eligible, enabled providers** for each current track, or reuses only the provider's completed checkpoint/cache for the exact query. Last.fm is not silently skipped after a strong MusicBrainz result. Provider quotas, unauthorized states and user pause still apply. This can take longer for a large library without adding concurrent workers. [Proof and remaining runtime gates](docs/planning/V1.0-PROVIDER-COMPLETENESS-2026-10-14.md).
+
 ## Full metadata and provider access (v1.0)
 
 Read-only public catalog tests on Legion confirmed MusicBrainz, Deezer and Apple/iTunes searches. A matching Deezer track/album returned ISRC, disc/track numbers, date, label, barcode and album artist. The rating is bidirectional: Deezer beats MusicBrainz only with stronger evidence, and vice versa.

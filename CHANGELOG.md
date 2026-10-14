@@ -28,6 +28,12 @@
 
 All changes below belong to the **same v1.0 development target**. A completed local fix is a development milestone, not a new product release. The version remains v1.0 until all release acceptance criteria have been met.
 
+### 2026-10-14 — Fix skipped provider comparisons for newly imported tracks
+
+- Corrected an early return: a strong match in an album-local cache was not proof that each enabled provider had been consulted for this newly imported recording.
+- Removed Last.fm early omission after an already strong MusicBrainz/Deezer hit. Completed exact-query checkpoints and source caches remain reusable; API limits and retries remain respected.
+- Four new synthetic tests cover both previously failing paths, SoundCloud vs Deezer/MusicBrainz and completed checkpoint reuse. 180 Legion tests PASS. [Evidence](docs/planning/V1.0-PROVIDER-COMPLETENESS-2026-10-14.md). Target remains v1.0.
+
 ### 2026-10-14 — Full source metadata and provider access
 
 - Public Deezer detail enrichment for one strong match: track/album endpoints with a shared quota and strict numeric URL allowlist; collect ISRC, track/disc numbers, label, barcode, album artist and dates where available; no artwork cached.
