@@ -60,6 +60,17 @@ class DocumentationAndInstaller(unittest.TestCase):
                          'Files-Match muss ALLE Dateien pruefen.')
         self.assertIn('save_tracking.py',required)
 
+    def test_installer_sha256_works_without_get_filehash_cmdlet(self):
+        installer=(ROOT/'Install-NEOWULF.ps1').read_text(encoding='utf-8')
+        self.assertNotIn('Get-FileHash',installer)
+        self.assertIn('function Get-FileSha256',installer)
+        self.assertIn('[System.Security.Cryptography.SHA256]::Create()',installer)
+        self.assertIn('[System.IO.File]::OpenRead(',installer)
+        self.assertIn('finally',installer)
+        self.assertIn('Get-FileSha256 $a',installer)
+        self.assertIn('Get-FileSha256 $b',installer)
+        self.assertIn('Get-FileSha256 $file',installer)
+
     def test_source_neutral_plugin_hooks_and_options(self):
         plugin=(ROOT/'neowulf_picard_repair/__init__.py').read_text(encoding='utf-8')
         for registration in ('api.register_album_metadata_processor(_album_guard',

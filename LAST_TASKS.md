@@ -87,6 +87,15 @@ Updated: 2026-10-14 · Project: `n-e-o-w-u-l-f/PicardWulf`
 - Next authorized operation: establish ordinary Windows OpenSSH user authorization from the BMAX desktop, or an existing eligible remote-management connection; only then run live installer with plugin disabled and Picard still open. No password guessing, host-verification bypass, process termination, original-music edits or installed-plugin change.
 - S5 deployment and BMAX post-save/restore verification remain BLOCKED by absent authenticated remote execution, not by repository publication. Target is v1.0 only.
 
+## Installer portability: missing Get-FileHash on BMAX-B6 — 2026-10-14
+
+- User-reported runtime failure in the downloaded Windows Live installer at Install-NEOWULF.ps1:67: PowerShell did not recognize the Get-FileHash cmdlet. This proves the installer failed before file hash comparison completed; no conclusion about plugin activation.
+- FAILURE_FINGERPRINT: BMAX-B6 / megal / PowerShell LiveUpdate / Files-Match hashing / missing command Get-FileHash. ROOT CAUSE: installer depends on an optional PowerShell cmdlet unavailable in the target session. Classification: GOVERNANCE_GAP (installer portability preflight missing).
+- Corrected all three sites: content comparison and historical pinned hashes now call Get-FileSha256, a streaming .NET SHA256 function using File.OpenRead and finally-disposed stream/hash object. Exact hex digests remain uppercase and are compared unchanged; missing files and unidentified plugin source are still rejected.
+- RED/GREEN regression checks absence of any Get-FileHash dependency, .NET hashing and all call sites. Updated old installer test that required the deprecated dependency. 199 local Python tests passed; no Windows PowerShell runtime test yet.
+- Existing downloaded archive on BMAX contains the old script and must be refreshed from the new verified GitHub commit. No process restart, provider key change or music-file modification.
+- Next: authenticated actual BMAX installer rerun with only PicardWulf disabled, Picard open, consent; validate installed plugin and API provider statuses before stable v1.0 release.
+
 ## Next safe actions
 
 ### S1 source checkpoint — 2026-10-14

@@ -30,7 +30,8 @@ class TestInstallerV2(unittest.TestCase):
 
     def test_atomic_stage_and_content_check(self):
         self.assertIn('Files-Match', self.ps)
-        self.assertIn('Get-FileHash', self.ps)
+        self.assertIn('Get-FileSha256', self.ps)
+        self.assertNotIn('Get-FileHash', self.ps)
         self.assertIn('Move-Item -LiteralPath $stage -Destination $target', self.ps)
 
     def test_no_config_mutation(self):

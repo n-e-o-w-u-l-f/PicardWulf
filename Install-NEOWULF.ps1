@@ -59,13 +59,30 @@ if ([string]::IsNullOrWhiteSpace($env:PICARD_PLUGIN_DIR)) {
 $target = Join-Path $pluginRoot 'neowulf_picard_repair'
 $stage = Join-Path $pluginRoot ('.neowulf-stage-' + [guid]::NewGuid().ToString('N'))
 
+# SHA-256 independent of an optional PowerShell Utility hashing cmdlet.
+# Some Windows PowerShell sessions lack that cmdlet; use streaming .NET hashing
+# so full audio files and plugin source are never loaded into memory.
+function Get-FileSha256([string]$path) {
+    $stream = $null
+    $sha256 = $null
+    try {
+        $stream = [System.IO.File]::OpenRead($path)
+        $sha256 = [System.Security.Cryptography.SHA256]::Create()
+        if ($null -eq $sha256) { throw 'SHA-256-Kryptografiedienst nicht verfuegbar.' }
+        return [System.BitConverter]::ToString($sha256.ComputeHash($stream)).Replace('-', '')
+    } finally {
+        if ($null -ne $sha256) { $sha256.Dispose() }
+        if ($null -ne $stream) { $stream.Dispose() }
+    }
+}
+
 function Files-Match([string]$left, [string]$right) {
     foreach ($rel in $required) {
         $a = Join-Path $left $rel
         $b = Join-Path $right $rel
         if (!(Test-Path -LiteralPath $a -PathType Leaf) -or !(Test-Path -LiteralPath $b -PathType Leaf)) { return $false }
-        $shaA = (Get-FileHash -LiteralPath $a -Algorithm SHA256).Hash
-        $shaB = (Get-FileHash -LiteralPath $b -Algorithm SHA256).Hash
+        $shaA = Get-FileSha256 $a
+        $shaB = Get-FileSha256 $b
         if ($shaA -ne $shaB) { return $false }
     }
     return $true
@@ -101,7 +118,7 @@ function Matches-Pinned-Source([string]$path, [hashtable]$pinned) {
     foreach ($rel in $pinned.Keys) {
         $file = Join-Path $path $rel
         if (!(Test-Path -LiteralPath $file -PathType Leaf)) { return $false }
-        if ((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ne $pinned[$rel]) { return $false }
+        if ((Get-FileSha256 $file) -ne $pinned[$rel]) { return $false }
     }
     # Do not silently discard unrecognized user-maintained source files.
     $sourceNames = @(Get-ChildItem -LiteralPath $path -File | ForEach-Object { $_.Name })
