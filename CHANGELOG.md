@@ -1,5 +1,13 @@
 # Changelog
 
+### 2026-10-14 — v1.0 S2 provider policy (source milestone)
+
+- Add explicit provider capabilities/consent, persisted request budgets/cooldowns/circuit state, bounded retries and operator controls. Partial/error responses cannot auto-apply or masquerade as empty successful searches.
+- Preserve source-neutral ranking while reusing complete local cache decisions, pacing multi-request adapters, selectively enriching Last.fm and retaining exact recording/ISRC lookup.
+- Guard existing Spotify access and SoundCloud's quota-reserved single-use refresh with encrypted acknowledgement; move credential updates off-GUI and preserve current rotated vault data.
+- Harden schemas, redirects, response bounds, secret-safe reason codes and iTunes JSON MIME handling; cache no artwork or authentication payloads.
+- Validate 145 tests, real Qt load/operator probes and anonymous MusicBrainz/Deezer/iTunes catalogue responses. Credentialed providers and BMAX remain unverified. [Evidence and limits](docs/planning/S2-EXECUTION-2026-10-14.md).
+
 ### 2026-10-14 — v1.0 S1 durable background scheduler (source milestone)
 
 - Bound uncommitted admission to 2,048 jobs, including in-flight batches; retry overflow through weak Picard file identities and display staged versus committed state.

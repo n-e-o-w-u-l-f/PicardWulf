@@ -32,7 +32,8 @@ class TestQueue(unittest.TestCase):
                    'isrc':'','recording_mbid':'','duration_ms':0,'albumartist':'Eminem'}
                 self.assertTrue(s.enqueue(engine.query_key(q),q))
             self.assertEqual(s.job_count(),115)
-            e=engine.UniversalAggregator(store=engine.ResultStore(p),transport=FastTransport(),credentials={})
+            e=engine.UniversalAggregator(store=engine.ResultStore(p),transport=FastTransport(),credentials={},
+                provider_delays={s:0 for s in engine.SOURCES})
             try:
                 for _ in range(300):
                     if s.job_count()==0:break

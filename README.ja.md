@@ -35,3 +35,10 @@ python -m unittest discover -s tests -v
 ```
 
 [英語の詳細ドキュメント](README.md) · [変更履歴](CHANGELOG.md) · [作業状況](LAST_TASKS.md) · [ライセンス](LICENSE)
+
+
+## v1.0 S2 — ソースコードの進捗
+
+プロバイダーごとの許可、利用状態、永続的なリクエスト制限と待機、安全なトークン管理を実装しました。未完了の応答は自動適用されません。MusicBrainz・Deezer・iTunes の匿名テストと145件のテストは成功しました。認証が必要なプロバイダーとBMAXでの動作確認は未完了です。新しい有料契約は作成しません。
+
+[S2 evidence / Nachweise](docs/planning/S2-EXECUTION-2026-10-14.md).

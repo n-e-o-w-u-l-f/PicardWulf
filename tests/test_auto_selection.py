@@ -183,7 +183,7 @@ class TestReleaseIdentityAndRace(unittest.TestCase):
             if params['method']=='track.search':
                 return {'results':{'trackmatches':{'track':[{'name':'Mockingbird','artist':'Eminem'}]}}}
             return {'track':{'album':{'title':'Encore','artist':'Eminem','mbid':'external-release-id'}}}
-        result=ad.lastfm(Q,request,{'lastfm_api_key':'test'})
+        result=ad.lastfm({**Q,'album':''},request,{'lastfm_api_key':'test'})
         self.assertEqual(result[0]['album'],'Encore')
         self.assertEqual(result[0]['provider_album_id'],'external-release-id')
         self.assertEqual(seen,['track.search','track.getInfo'])

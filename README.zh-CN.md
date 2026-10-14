@@ -35,3 +35,10 @@ python -m unittest discover -s tests -v
 ```
 
 [详细英文文档](README.md) · [更新日志](CHANGELOG.md) · [待办状态](LAST_TASKS.md) · [许可证](LICENSE)
+
+
+## v1.0 S2 — 源代码进度
+
+已实现各数据源授权、可用状态、持久化请求限额与等待，以及安全的令牌管理。未完成的响应不会自动应用。MusicBrainz、Deezer、iTunes 匿名查询和145项测试均通过；需要认证的数据源及BMAX运行验证仍未完成。不会创建新的付费订阅。
+
+[S2 evidence / Nachweise](docs/planning/S2-EXECUTION-2026-10-14.md).

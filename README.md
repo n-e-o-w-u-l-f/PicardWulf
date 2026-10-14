@@ -194,3 +194,10 @@ Sources: [Picard plugin v3 API](https://github.com/metabrainz/picard/blob/master
 [SoundCloud developers](https://developers.soundcloud.com/docs/),
 [Last.fm API](https://www.last.fm/api/),
 [iTunes Search API](https://performance-partners.apple.com/resources/documentation/itunes-store-web-service-search-api/).
+
+
+## v1.0 S2 source checkpoint
+
+Provider consent, explicit availability, persisted request budgets/backoff and safe token handling are now implemented. Complete cached decisions can be reused; unfinished responses cannot auto-apply. Tools → PicardWulf → **Anbieter, Suchumfang und Anfragebudget** controls disabled sources, exhaustive mode, existing Spotify access and hourly budgets. Anonymous MusicBrainz/Deezer/iTunes probes and 145 tests pass; credentialed providers and BMAX runtime remain unverified.
+
+[S2 evidence / Nachweise](docs/planning/S2-EXECUTION-2026-10-14.md).

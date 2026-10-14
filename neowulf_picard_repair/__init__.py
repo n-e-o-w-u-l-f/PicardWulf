@@ -221,6 +221,25 @@ def _track_loaded(api, track, metadata, track_node, release_node=None):
             api.logger.warning('Universal track scheduling failed: %s', type(exc).__name__)
 
 
+_SOURCE_NAMES={'musicbrainz':'MusicBrainz','deezer':'Deezer','itunes':'Apple/iTunes',
+               'spotify':'Spotify','soundcloud':'SoundCloud','lastfm':'Last.fm'}
+
+
+def _source_line(source,cap):
+    states={'AVAILABLE':'Für Abfragen zugelassen','CREDENTIALS_REQUIRED':'Zugangsdaten benötigt',
+            'QUOTA_WAIT':'Wartet auf das Anfragebudget','TEMPORARY_ERROR':'Vorübergehend nicht verfügbar',
+            'RESTRICTED':'Zugang eingeschränkt','DISABLED':'Ausgeschaltet'}
+    reasons={'existing_access_not_confirmed_no_purchase':'Bereits bestehenden Zugang in den Anbieteroptionen bestätigen.',
+             'one_time_refresh_uncertain':'Ein neuer gültiger Refresh-Token wird benötigt.',
+             'credentials_missing':'Zugangsdaten fehlen.', 'HTTP_401':'Der Anbieter hat die Zugangsdaten abgelehnt.',
+             'HTTP_403':'Der Anbieter hat den App-Zugang abgelehnt.', 'request_budget':'Die gespeicherte Wartezeit gilt weiter.',
+             'response_invalid':'Die Antwort konnte nicht sicher ausgewertet werden.',
+             'vault_unavailable':'Der sichere Schlüsselspeicher ist nicht verfügbar.'}
+    observed='Eine Antwort wurde bereits geprüft.' if cap.get('observed') else 'Noch keine Antwort geprüft.'
+    return (f'{_SOURCE_NAMES.get(source,source)}: {states.get(cap.get("state"),"Wird geprüft")} · '
+            f'{reasons.get(cap.get("reason"),"")} {observed}').strip()
+
+
 class SourceStatus(BaseAction):
     TITLE = 'Quellenstatus und Warteschlange'
     MENU = ('NEOWULF',)
@@ -228,15 +247,9 @@ class SourceStatus(BaseAction):
     def callback(self, objs):
         eng = _get_engine()
         st = eng.status()
-        creds = dict(eng.credentials)
-        spotify = bool(creds.get('spotify_access_token') or
-                       (creds.get('spotify_client_id') and creds.get('spotify_client_secret')))
+        lines='\n'.join(_source_line(source,cap) for source,cap in st.get('capabilities',{}).items())
         _show('NEOWULF Universal Metadata',
-            'MusicBrainz: aktiv (frei)\nDeezer: aktiv (öffentliche Katalogsuche)\n'
-            'Apple iTunes-Katalog: aktiv (öffentliche Suche)\n'
-            f'Spotify: {"konfiguriert" if spotify else "Zugangsdaten fehlen"}\n'
-            f'SoundCloud: {"konfiguriert" if creds.get("soundcloud_token") else "OAuth-Token fehlt"}\n'
-            f'Last.fm: {"konfiguriert" if creds.get("lastfm_api_key") else "API-Schlüssel fehlt"}\n\n'
+            (lines or 'Anbietersteuerung wird im Hintergrund initialisiert.')+'\n\n'
             f'Geplant: {st["queued"]} · Eingangs-Puffer: {st["staging"]} · Ausstehend: {st["backlog"]} · In Arbeit: {st["pending"]} · Fehlgeschlagen: {st["failed"]} · Pause: {st["paused"]}\n'
             f'Großer Rückstand beim Start: {st["auto_paused_backlog"]}\n\n'
             f'Bestätigt verarbeitet: {st["committed"]} · Wiederholen: {st["retry"]}\n'
@@ -244,6 +257,51 @@ class SourceStatus(BaseAction):
             'Eingangs-Puffer ist noch NICHT dauerhaft; Überlauf wartet in Picard.\n'
             'Konfiguriert bedeutet nicht, dass der Anbieter die Anfrage freigibt.\n'
             'Detaillierte Antworten und HTTP-Status unter Ergebnisse ansehen.')
+
+
+def _provider_options(config):
+    return {'disabled':config.get('disabled_providers',[]),
+            'exhaustive':config.get('search_exhaustive',False),
+            'spotify_existing_access_confirmed':config.get('spotify_existing_access_confirmed',False),
+            'requests_per_hour':config.get('provider_requests_per_hour',3000)}
+
+
+class ProviderPolicyAction(BaseAction):
+    TITLE = 'Anbieter, Suchumfang und Anfragebudget'
+    MENU = ('PicardWulf',)
+
+    def callback(self,objs):
+        from PyQt6.QtWidgets import (QDialog,QVBoxLayout,QLabel,QCheckBox,QSpinBox,QDialogButtonBox)
+        from .universal_adapters import SOURCES
+        from .provider_policy import normalize_options
+        cfg=self.api.plugin_config
+        options=normalize_options(_provider_options(cfg))
+        dlg=QDialog(None);dlg.setWindowTitle('PicardWulf – Anbieter und Suche')
+        layout=QVBoxLayout(dlg)
+        layout.addWidget(QLabel('Nur zugelassene Quellen erhalten Metadaten.\n'
+                               'Es werden keine Konten erstellt und keine Abonnements abgeschlossen.'))
+        inputs={}
+        for source in SOURCES:
+            check=QCheckBox(_SOURCE_NAMES[source],dlg)
+            check.setChecked(source not in options['disabled'])
+            layout.addWidget(check);inputs[source]=check
+        exhaustive=QCheckBox('Alle zugänglichen Quellen auch bei starkem lokalem Treffer prüfen',dlg)
+        exhaustive.setChecked(options['exhaustive']);layout.addWidget(exhaustive)
+        spotify=QCheckBox('Für diese Spotify-App besteht bereits ein zulässiger API-Zugang',dlg)
+        spotify.setChecked(options['spotify_existing_access_confirmed']);layout.addWidget(spotify)
+        layout.addWidget(QLabel('Maximale Anfragen je Anbieter und Stunde; Anbieterlimits gelten zusätzlich.'))
+        budget=QSpinBox(dlg);budget.setRange(1,3000)
+        budget.setValue(options['requests_per_hour']);layout.addWidget(budget)
+        buttons=QDialogButtonBox(QDialogButtonBox.StandardButton.Save|QDialogButtonBox.StandardButton.Cancel)
+        layout.addWidget(buttons);buttons.accepted.connect(dlg.accept);buttons.rejected.connect(dlg.reject)
+        if dlg.exec()!=QDialog.DialogCode.Accepted:return
+        cfg['disabled_providers']=[s for s,w in inputs.items() if not w.isChecked()]
+        cfg['search_exhaustive']=exhaustive.isChecked()
+        cfg['spotify_existing_access_confirmed']=spotify.isChecked()
+        cfg['provider_requests_per_hour']=budget.value()
+        _get_engine().configure_providers(_provider_options(cfg))
+        _show('PicardWulf','Anbietersteuerung übernommen. Bereits laufende Anfragen dürfen auslaufen; '
+                         'bestehende Quoten-Wartezeiten bleiben erhalten.')
 
 
 class CredentialsAction(BaseAction):
@@ -270,11 +328,14 @@ class CredentialsAction(BaseAction):
         labels={'spotify_client_id':'Spotify Client-ID',
                 'spotify_client_secret':'Spotify Client-Secret',
                 'soundcloud_token':'SoundCloud OAuth Access Token',
+                'soundcloud_client_id':'SoundCloud Client-ID (bereits registriert)',
+                'soundcloud_client_secret':'SoundCloud Client-Secret',
+                'soundcloud_refresh_token':'SoundCloud Refresh-Token',
                 'lastfm_api_key':'Last.fm API-Key'}
         inputs={}
-        for key in FIELDS:
+        for key in labels:
             w=QLineEdit()
-            if key != 'spotify_client_id':w.setEchoMode(QLineEdit.EchoMode.Password)
+            if key not in ('spotify_client_id','soundcloud_client_id'):w.setEchoMode(QLineEdit.EchoMode.Password)
             w.setPlaceholderText('Bereits gespeichert – leer lassen' if existing.get(key) else 'Noch nicht konfiguriert')
             form.addRow(labels[key],w)
             inputs[key]=w
@@ -285,19 +346,27 @@ class CredentialsAction(BaseAction):
         buttons.accepted.connect(dlg.accept)
         buttons.rejected.connect(dlg.reject)
         if dlg.exec() != QDialog.DialogCode.Accepted:return
-        updated=dict(existing)
-        updated.update({key:w.text().strip() for key,w in inputs.items() if w.text().strip()})
+        updated={key:w.text().strip() for key,w in inputs.items() if w.text().strip()}
         if not updated:
             _show('NEOWULF', 'Keine Zugangsdaten vorhanden; nichts geändert.')
             return
         try:
-            save_credentials(updated)
             eng=_get_engine()
-            eng.credentials.update(updated)
-            # Token obtained through old client credentials must not be reused after update.
-            eng.credentials.pop('spotify_access_token',None)
-            eng.credentials.pop('spotify_token_until',None)
-            _show('NEOWULF', 'API-Zugangsdaten verschlüsselt gespeichert. Keine geheimen Daten in Picard.ini.')
+            receipt=eng.update_credentials(updated,persist=True)
+            if receipt is None:raise RuntimeError('Hintergrundwarteschlange ausgelastet; nichts gespeichert.')
+            from PyQt6.QtCore import QTimer
+            timer=QTimer(self.api.tagger)
+            def acknowledged():
+                if not receipt.done():return
+                timer.stop();timer.deleteLater()
+                if eng.stopped:return
+                try:receipt.result()
+                except Exception as exc:
+                    _show('NEOWULF',f'Zugangsdaten NICHT bestätigt: {type(exc).__name__}','warning')
+                else:
+                    _show('NEOWULF','API-Zugangsdaten verschlüsselt gespeichert. Keine geheimen Daten in Picard.ini.')
+            timer.timeout.connect(acknowledged);timer.start(100)
+            _show('NEOWULF','Speicherung im Hintergrund beauftragt. Bestätigung folgt erst nach erfolgreicher Speicherung.')
         except Exception as exc:
             _show('NEOWULF', f'Zugangsdaten NICHT gespeichert: {type(exc).__name__}', 'warning')
 
@@ -480,10 +549,15 @@ def enable(api):
     api.plugin_config.register_option('auto_save_with_backup', False)
     api.plugin_config.register_option('search_paused', False)
     api.plugin_config.register_option('sqlite_batch_size', 256)
+    api.plugin_config.register_option('disabled_providers', [])
+    api.plugin_config.register_option('search_exhaustive', False)
+    api.plugin_config.register_option('spotify_existing_access_confirmed', False)
+    api.plugin_config.register_option('provider_requests_per_hour', 3000)
     try:
         _aggregator = UniversalAggregator(paused=bool(api.plugin_config.get('search_paused', False)),
                                          predecessor=_retiring_engine,
-                                         batch_size=api.plugin_config.get('sqlite_batch_size',256))
+                                         batch_size=api.plugin_config.get('sqlite_batch_size',256),
+                                         provider_options=_provider_options(api.plugin_config))
     except Exception as exc:
         _aggregator = None
         api.logger.error('Universal aggregator initialization failed: %s', type(exc).__name__)
@@ -501,6 +575,7 @@ def enable(api):
     api.register_file_post_load_processor(_file_loaded)
     api.register_track_metadata_processor(_track_loaded, priority=-1000)
     api.register_tools_menu_action(SourceStatus)
+    api.register_tools_menu_action(ProviderPolicyAction)
     api.register_tools_menu_action(CredentialsAction)
     api.register_tools_menu_action(ResultsAction)
     api.register_tools_menu_action(RefreshAction)

@@ -59,3 +59,10 @@ python -m unittest discover -s tests -v
 Weitere technische Einzelheiten stehen in der [englischen Referenz-README](README.md). Lokale Tests ersetzen keine Live-Abnahme auf BMAX. Zusätzliche kostenpflichtige Runner oder Abonnements sind nicht vorgesehen.
 
 [Quellcode](https://github.com/n-e-o-w-u-l-f/PicardWulf) · [Änderungen](CHANGELOG.md) · [Offene Prüfungen](LAST_TASKS.md) · [Lizenz](LICENSE)
+
+
+## v1.0 S2 – Quellstand
+
+Anbieterfreigaben, klare Verfügbarkeitszustände, dauerhafte Anfragebudgets/Wartezeiten und sichere Tokenverwaltung sind umgesetzt. Vollständige Cache-Entscheidungen können wiederverwendet werden; ausstehende Antworten lösen keine automatische Übernahme aus. Unter Werkzeuge → PicardWulf → **Anbieter, Suchumfang und Anfragebudget** lassen sich Quellen, vollständige Suche, bereits vorhandener Spotify-Zugang und Stundenbudget einstellen. Anonyme MusicBrainz-/Deezer-/iTunes-Prüfungen und 145 Tests bestehen; Anbieter mit Zugangsdaten und BMAX-Laufzeit bleiben offen.
+
+[S2 evidence / Nachweise](docs/planning/S2-EXECUTION-2026-10-14.md).

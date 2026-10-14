@@ -88,7 +88,7 @@ class TestContract(unittest.TestCase):
         before=api.global_config.setting['file_renaming_scripts']['a']['script']
         with patch.object(plugin,'AutoApplyController'), patch.object(plugin,'UniversalAggregator'):
             plugin.enable(api)
-        self.assertEqual(len(api.registered),14)
+        self.assertEqual(len(api.registered),15)
         self.assertTrue(api.plugin_config['auto_apply_best'])
         self.assertFalse(api.plugin_config['auto_save_with_backup'])
         self.assertEqual(api.global_config.setting['file_renaming_scripts']['a']['script'],before)

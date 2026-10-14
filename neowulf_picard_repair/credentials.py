@@ -8,7 +8,20 @@ import json
 import os
 from pathlib import Path
 
-FIELDS=('spotify_client_id','spotify_client_secret','soundcloud_token','lastfm_api_key')
+FIELDS=('spotify_client_id','spotify_client_secret','soundcloud_token','lastfm_api_key',
+        'soundcloud_client_id','soundcloud_client_secret','soundcloud_refresh_token',
+        'soundcloud_token_until','soundcloud_refresh_pending')
+
+
+def persist_soundcloud(values):
+    """Rotate only encrypted token fields; never persist environment client secrets."""
+    stored=load()
+    stored.update({k:str(v) for k,v in values.items() if k in FIELDS and k.startswith('soundcloud_')
+                   and k not in ('soundcloud_client_id','soundcloud_client_secret')})
+    # save() omits empty values. Remove a successfully consumed pending marker.
+    for k in ('soundcloud_refresh_pending',):
+        if k in values and not values[k]:stored.pop(k,None)
+    return save(stored)
 
 
 def credential_path():

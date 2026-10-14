@@ -132,7 +132,8 @@ class TestStoreAndRunner(unittest.TestCase):
         class Transport:request=staticmethod(fake)
         with tempfile.TemporaryDirectory() as d:
             s=mod.ResultStore(pathlib.Path(d)/'cache.db')
-            eng=mod.UniversalAggregator(store=s,transport=Transport(),credentials={})
+            eng=mod.UniversalAggregator(store=s,transport=Transport(),credentials={},
+                provider_delays={source:0 for source in ad.SOURCES})
             try:
                 self.assertTrue(eng.schedule(Q))
                 for _ in range(100):
@@ -141,9 +142,9 @@ class TestStoreAndRunner(unittest.TestCase):
                     time.sleep(.01)
                 self.assertIsNotNone(x)
                 status=x['payload']['status']
-                self.assertEqual(status['spotify'],'not_configured')
-                self.assertEqual(status['soundcloud'],'not_configured')
-                self.assertEqual(status['lastfm'],'not_configured')
+                self.assertEqual(status['spotify'],'CREDENTIALS_REQUIRED')
+                self.assertEqual(status['soundcloud'],'CREDENTIALS_REQUIRED')
+                self.assertEqual(status['lastfm'],'CREDENTIALS_REQUIRED')
                 self.assertEqual(set(calls),{'musicbrainz','deezer','itunes'})
                 self.assertEqual(x['query']['albumartist'],'Eminem')
             finally:

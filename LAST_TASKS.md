@@ -74,6 +74,15 @@ Updated: 2026-10-14 · Project: `n-e-o-w-u-l-f/PicardWulf`
 
 The earlier validation/incident sections above are historical checkpoints; this S1 evidence supersedes the old unbounded-ingest and GUI SQLite/media-I/O findings only at source level.
 
+### S2 provider-policy source checkpoint — 2026-10-14
+
+- Starting HEAD `c492fa8a7b6efb24f76b51e5f5dcb83a8dbb317a` verified clean on GitHub/local Legion; target remains **v1.0**, no deployment/release/tag. Existing Deep Research reused.
+- Implemented schema v3 with persisted provider budgets, cooldown/circuit and retry cursors; capability/consent/budget UI; incomplete-result auto-apply guard; safe complete album-pool reuse; source-neutral competing queries; selective enrichment and MBID/ISRC lookup; optional existing Spotify access confirmation; quota-reserved encrypted SoundCloud rotation and asynchronous credential updates.
+- **PASS:** 145 unit/contract tests; real Qt 39k load (staging ≤2,048, zero GUI SQLite calls), backup/identity/refresh regressions and operator/credential acknowledgement. Three independently reviewed P1 defects reproduced and fixed. [S2 evidence](docs/planning/S2-EXECUTION-2026-10-14.md).
+- **OBSERVED LIVE:** anonymous fixed public Bach/Air query returns valid data from MusicBrainz, Deezer and iTunes. No personal music/API secrets submitted; no artwork cached. Spotify/SoundCloud/Last.fm remain **UNAVAILABLE_FOR_THIS_VALIDATION**, not claimed healthy.
+- **OPEN:** BMAX access/runtime, actual encrypted-vault/token lifecycle there, and credentialed provider entitlement/quota. Existing Picard/music untouched; no new paid services and no host-trust bypass. S3 is the next source phase; S4/S5 and full v1.0 acceptance remain separate.
+- Final publication requires commit/push plus GitHub HEAD/LAST_TASKS/evidence readback and clean Legion checkout confirmation.
+
 ### Historical later-phase follow-ups (S4/S5, not current deployment)
 
 1. Run fresh `git pull --ff-only` before editing, inspect `README.md`, `CHANGELOG.md` and failing runtime gates. Preserve unrelated changes.

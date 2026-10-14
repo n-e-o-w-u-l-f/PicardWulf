@@ -35,3 +35,10 @@ python -m unittest discover -s tests -v
 ```
 
 [Documentation détaillée en anglais](README.md) · [Journal des modifications](CHANGELOG.md) · [État](LAST_TASKS.md) · [Licence](LICENSE)
+
+
+## v1.0 S2 – état du code
+
+Le consentement par fournisseur, les états de disponibilité, les budgets et délais persistants ainsi que la gestion sûre des jetons sont implémentés. Les réponses incomplètes ne déclenchent aucune application automatique. Les sondes anonymes MusicBrainz/Deezer/iTunes et 145 tests passent ; les fournisseurs authentifiés et le fonctionnement sur BMAX restent à vérifier. Aucun nouvel abonnement.
+
+[S2 evidence / Nachweise](docs/planning/S2-EXECUTION-2026-10-14.md).

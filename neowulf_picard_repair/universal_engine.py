@@ -11,6 +11,7 @@ import re
 import sqlite3
 import threading
 import time
+import random
 import unicodedata
 from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor
@@ -19,10 +20,12 @@ from concurrent.futures import Future
 from difflib import SequenceMatcher
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlparse
-from urllib.request import Request, urlopen
+from urllib.request import Request, urlopen, build_opener, HTTPRedirectHandler
 
 from .universal_adapters import SOURCES, ADAPTERS, env_credentials, one
 from .credentials import load as load_credentials
+from .provider_policy import (ProviderError, PolicyClient, capability, RETRYABLE, album_cache_key,
+                              retry_delay, normalize_options)
 
 TTL = 72 * 3600
 MAX_BODY = 900_000
@@ -34,10 +37,12 @@ _ALLOWED = {
     'spotify_auth': ('accounts.spotify.com','/api/token'),
     'spotify': ('api.spotify.com','/v1/search'),
     'soundcloud': ('api.soundcloud.com','/tracks'),
+    'soundcloud_auth': ('secure.soundcloud.com','/oauth/token'),
     'lastfm': ('ws.audioscrobbler.com','/2.0/'),
 }
 MIN_DELAY = {'musicbrainz':1.15,'musicbrainz_lookup':1.15,'deezer':1.4,'itunes':3.2,'spotify_auth':1.,
              'spotify':1.0,'soundcloud':1.1,'lastfm':1.1}
+MIN_DELAY['soundcloud_auth']=900.
 
 def norm(text):
     text = unicodedata.normalize('NFKD', one(text)).casefold()
@@ -120,11 +125,16 @@ def aggregate(q, results):
     return {'verdict': verdict, 'candidates': rows[:40], 'auto': decision}
 
 
+class NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self,*args,**kwargs):return None
+
+
 class HTTPClient:
     def __init__(self):
         self._lock=threading.Lock()
         self._last={}
         self._cooldown={}
+        self._opener=build_opener(NoRedirect())
 
     def request(self,source,url,params,headers=None,form=None):
         host,path=_ALLOWED[source]
@@ -152,8 +162,12 @@ class HTTPClient:
         if headers:h.update(headers)
         req=Request(wire, data=body,headers=h,method='POST' if form is not None else 'GET')
         try:
-            with urlopen(req,timeout=9) as resp:
+            with self._opener.open(req,timeout=9) as resp:
                 if int(resp.status)!=200:raise ValueError('unexpected status')
+                content_type=resp.headers.get('Content-Type','').split(';',1)[0].strip().lower()
+                apple_json=(source=='itunes' and content_type in ('text/javascript','application/javascript'))
+                if not apple_json and content_type not in ('application/json','text/json') and not content_type.endswith('+json'):
+                    raise ValueError('unexpected content type')
                 data=resp.read(MAX_BODY+1)
                 if len(data)>MAX_BODY:raise ValueError('response too large')
                 result=json.loads(data.decode('utf-8'))
@@ -162,17 +176,14 @@ class HTTPClient:
                 return result
         except HTTPError as exc:
             if exc.code in (429,503):
-                try:delay=max(8,min(int(exc.headers.get('Retry-After','45')),180))
-                except ValueError:delay=45
+                delay=max(8,retry_delay(exc.headers.get('Retry-After','45')))
                 with self._lock:self._cooldown[rate_bucket]=time.monotonic()+delay
-            raise ProviderError(f'HTTP_{exc.code}') from None
+            exc.close()
+            raise ProviderError(f'HTTP_{exc.code}',retry_after=delay if exc.code in (429,503) else 0) from None
         except (URLError,OSError,TimeoutError) as exc:
             raise ProviderError(type(exc).__name__) from None
         except (ValueError, UnicodeError) as exc:
             raise ProviderError('response_invalid') from None
-
-
-class ProviderError(Exception): pass
 
 
 class ResultStore:
@@ -189,10 +200,10 @@ class ResultStore:
             if db.execute('PRAGMA quick_check').fetchone()[0] != 'ok':
                 raise sqlite3.DatabaseError('queue integrity check failed')
             version = db.execute('PRAGMA user_version').fetchone()[0]
-            if version > 2:
+            if version > 3:
                 raise sqlite3.DatabaseError('unsupported future queue schema')
             existing = db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='jobs'").fetchone()
-            if existing and version < 2:
+            if existing and version < 3:
                 self.migration_backup = self.path.with_name(self.path.name + '.schema-backup-' + self.session)
                 with closing(sqlite3.connect(str(self.migration_backup))) as backup:
                     db.backup(backup)
@@ -219,7 +230,11 @@ class ResultStore:
             db.execute('CREATE INDEX IF NOT EXISTS jobs_dispatch ON jobs(state, session, queued)')
             db.execute('CREATE TABLE IF NOT EXISTS provider_tasks(k TEXT, revision INTEGER, source TEXT, '
                        'status TEXT, payload TEXT, updated REAL, PRIMARY KEY(k,revision,source))')
-            db.execute('PRAGMA user_version=2')
+            task_cols={row[1] for row in db.execute('PRAGMA table_info(provider_tasks)')}
+            for name,definition in (('attempts','INTEGER DEFAULT 0'),('retry_at','REAL DEFAULT 0')):
+                if name not in task_cols:db.execute(f'ALTER TABLE provider_tasks ADD COLUMN {name} {definition}')
+            db.execute('CREATE TABLE IF NOT EXISTS provider_budgets(source TEXT PRIMARY KEY,payload TEXT)')
+            db.execute('PRAGMA user_version=3')
 
     @contextmanager
     def _db(self):
@@ -345,17 +360,19 @@ class ResultStore:
 
     def provider_progress(self, key, revision):
         with self._lock, self._db() as db:
-            rows = db.execute('SELECT source,status,payload FROM provider_tasks WHERE k=? AND revision=?',
+            rows = db.execute('SELECT source,status,payload,attempts,retry_at FROM provider_tasks WHERE k=? AND revision=?',
                               (key, revision)).fetchall()
-        return {src: {'status': state, 'payload': json.loads(payload)} for src, state, payload in rows}
+        return {src: {'status': state, 'payload': json.loads(payload),'attempts':attempts,'retry_at':retry_at}
+                for src, state, payload,attempts,retry_at in rows}
 
-    def checkpoint(self, key, revision, source, candidates, status):
+    def checkpoint(self, key, revision, source, candidates, status,attempts=0,retry_at=0):
         with self._lock, self._db() as db:
             if db.execute("SELECT 1 FROM jobs WHERE k=? AND revision=? AND state='running'",
                           (key, revision)).fetchone() is None:
                 return False
-            db.execute('INSERT OR REPLACE INTO provider_tasks VALUES(?,?,?,?,?,?)',
-                       (key, revision, source, status, json.dumps(candidates), time.time()))
+            db.execute('INSERT OR REPLACE INTO provider_tasks(k,revision,source,status,payload,updated,attempts,retry_at) '
+                       'VALUES(?,?,?,?,?,?,?,?)',
+                       (key, revision, source, status, json.dumps(candidates), time.time(),attempts,retry_at))
         return True
 
     def finish_job(self, key, revision, q, payload):
@@ -380,6 +397,71 @@ class ResultStore:
         with self._lock, self._db() as db:
             rows = db.execute('SELECT state,COUNT(*) FROM jobs GROUP BY state').fetchall()
         return dict({'queued':0, 'running':0, 'retry':0, 'failed':0}, **dict(rows))
+
+    def _budget(self,db,source):
+        row=db.execute('SELECT payload FROM provider_budgets WHERE source=?',(source,)).fetchone()
+        return json.loads(row[0]) if row else {}
+
+    def _save_budget(self,db,source,value):
+        db.execute('INSERT OR REPLACE INTO provider_budgets VALUES(?,?)',(source,json.dumps(value)))
+
+    def reserve_provider(self,source,now,delay,budget):
+        with self._lock,self._db() as db:
+            db.execute('BEGIN IMMEDIATE')
+            value=self._budget(db,source)
+            if value.get('state') in ('CREDENTIALS_REQUIRED','RESTRICTED'):
+                return dict(value,wait=0)
+            window=value.get('window',now)
+            if now>=window+3600:value.update(window=now,used=0)
+            used=value.get('used',0)
+            wait=max(0,value.get('next',0)-now,value.get('cooldown',0)-now,
+                     window+3600-now if used>=max(1,budget) else 0)
+            if not wait:
+                # Capacity-one token bucket: persist the next refill before a
+                # request, so plugin reload cannot manufacture another token.
+                value.update(next=now+max(0,delay),window=value.get('window',now),used=used+1)
+                self._save_budget(db,source,value)
+            return {'wait':wait,'state':'QUOTA_WAIT' if wait else 'AVAILABLE',
+                    'reason':'request_budget' if wait else 'reserved'}
+
+    def provider_failure(self,source,state,reason,retry_at,errors,observed=True):
+        with self._lock,self._db() as db:
+            db.execute('BEGIN IMMEDIATE')
+            value=self._budget(db,source)
+            count=value.get('errors',0)+errors
+            cooldown=max(value.get('cooldown',0),retry_at)
+            if state=='TEMPORARY_ERROR' and count>=3:cooldown=max(cooldown,time.time()+180)
+            value.update(state=state,reason=reason,errors=count,cooldown=cooldown,observed=bool(observed))
+            self._save_budget(db,source,value)
+
+    def provider_success(self,source):
+        with self._lock,self._db() as db:
+            value=self._budget(db,source)
+            value.update(state='AVAILABLE',reason='response_received',errors=0,observed=True)
+            self._save_budget(db,source,value)
+
+    def provider_status(self):
+        with self._lock,self._db() as db:
+            rows=db.execute('SELECT source,payload FROM provider_budgets').fetchall()
+        return {s:json.loads(p) for s,p in rows}
+
+    def reset_providers(self,sources):
+        with self._lock,self._db() as db:
+            for source in sources:
+                value=self._budget(db,source)
+                # Credentials update does not reset quota tokens or cooldown.
+                value.update(state='AVAILABLE',reason='credentials_updated',errors=0)
+                self._save_budget(db,source,value)
+
+    def defer_job(self,key,revision,q,payload,retry_at):
+        with self._lock,self._db() as db:
+            db.execute('BEGIN IMMEDIATE')
+            if db.execute("SELECT 1 FROM jobs WHERE k=? AND revision=? AND state='running'",
+                          (key,revision)).fetchone() is None:return False
+            db.execute('INSERT OR REPLACE INTO results VALUES(?,?,?,?)',
+                       (key,time.time(),json.dumps(q),json.dumps(payload)))
+            db.execute("UPDATE jobs SET state='retry',retry_at=? WHERE k=?",(retry_at,key))
+        return True
 
     def next_jobs(self,exclude,limit=8):
         with self._lock,self._db() as db:
@@ -440,13 +522,17 @@ class UniversalAggregator:
     is set only after staging is committed and all writer work has finished.
     """
     def __init__(self, store=None, transport=None, credentials=None, paused=False,
-                 capacity=2048, batch_size=256, predecessor=None):
+                 capacity=2048, batch_size=256, predecessor=None,provider_options=None,provider_delays=None):
         from .background_io import DatabaseWorker
         self.capacity = max(1, min(2048, int(capacity)))
         self.batch_size = max(1, min(self.capacity, int(batch_size)))
         self.http = transport or HTTPClient()
         self.credentials = dict(credentials or {})
         self._load_credentials = credentials is None
+        self.provider_options=normalize_options(provider_options or {})
+        self.provider_delays=dict(MIN_DELAY if provider_delays is None else provider_delays)
+        self._capabilities={}
+        self._adapter_locks={source:threading.RLock() for source in ('musicbrainz','lastfm')}
         self._lock = threading.RLock()
         self._ingest_lock = self._lock
         self._ingest = deque()
@@ -536,6 +622,8 @@ class UniversalAggregator:
                 except (OSError, ValueError, RuntimeError):
                     pass
             self.store.begin_session()
+            self.policy=PolicyClient(self.store,self.http,self.credentials,self.provider_options,self.provider_delays,
+                                     stopped=lambda:self.stopped)
             self._counts = self.store.state_counts()
             self.auto_paused_backlog = sum(self._counts.values()) > 2000
             self.paused = self.paused or self.auto_paused_backlog
@@ -584,7 +672,10 @@ class UniversalAggregator:
                                 with self._lock:self.pending.discard(key)
                                 continue
                             if payload is not None:
-                                self.store.finish_job(key, revision, q, payload)
+                                retry_at=payload.get('_defer_until',0)
+                                clean_payload={k:v for k,v in payload.items() if k!='_defer_until'}
+                                if retry_at:self.store.defer_job(key,revision,q,clean_payload,retry_at)
+                                else:self.store.finish_job(key, revision, q, clean_payload)
                         except (sqlite3.Error, OSError) as exc:
                             self._database_failure(exc)
                             with self._lock:
@@ -600,7 +691,29 @@ class UniversalAggregator:
                     if request:
                         method, argument, receipt = request
                         try:
-                            value=getattr(self.store, method)(argument)
+                            if method=='apply_credentials':
+                                from .universal_adapters import _AUTH_LOCKS
+                                with _AUTH_LOCKS['spotify'],_AUTH_LOCKS['soundcloud']:
+                                    values,persist=argument
+                                    if persist:
+                                        from .credentials import save
+                                        current=load_credentials()
+                                    else:current=dict(self.credentials)
+                                    refresh_changed=('soundcloud_refresh_token' in values and
+                                        values['soundcloud_refresh_token']!=current.get('soundcloud_refresh_token'))
+                                    current.update(values)
+                                    if refresh_changed:
+                                        current.pop('soundcloud_refresh_pending',None)
+                                        current['soundcloud_token_until']='1'
+                                    if persist:save(current)
+                                    self.credentials.update(current)
+                                    if refresh_changed:self.credentials.pop('soundcloud_refresh_pending',None)
+                                    if any(k.startswith('spotify_') for k in values):
+                                        self.credentials.pop('spotify_access_token',None)
+                                        self.credentials.pop('spotify_token_until',None)
+                                self.store.reset_providers(('spotify','spotify_auth','soundcloud','soundcloud_auth','lastfm'))
+                                value={'saved':bool(persist)}
+                            else:value=getattr(self.store, method)(argument)
                             if method=='get_results':
                                 with self._lock:
                                     for k,_,force in self._ingest:
@@ -608,7 +721,8 @@ class UniversalAggregator:
                             receipt.set_result(value)
                         except Exception as exc:
                             receipt.set_exception(exc)
-                            self._database_failure(exc)
+                            if method!='apply_credentials' or isinstance(exc,sqlite3.Error):
+                                self._database_failure(exc)
                     with self._lock:
                         stopping = self.stopped
                         drained = not self._ingest_seen and not self.pending
@@ -624,6 +738,15 @@ class UniversalAggregator:
                             task = self.executor.submit(self._work, key, q, force, revision)
                             task.add_done_callback(lambda f,k=key,r=revision: self._complete(k,r,f))
                     self._counts = self.store.state_counts()
+                    observed=self.store.provider_status()
+                    with self._lock:
+                        self._capabilities={source:capability(source,self.credentials,self.provider_options)
+                                            for source in SOURCES}
+                        for source,value in observed.items():
+                            if source not in SOURCES:continue
+                            if self._capabilities[source]['state']!='AVAILABLE':continue
+                            self._capabilities[source].update(state=value.get('state','AVAILABLE'),
+                                reason=value.get('reason','eligible_unprobed'),observed=value.get('observed',False))
                 except (sqlite3.Error, OSError) as exc:
                     self._database_failure(exc)
                     self._ingest_event.wait(.25)
@@ -664,72 +787,169 @@ class UniversalAggregator:
     def wait_stopped(self, timeout=10):
         return self._stop_receipt.wait(timeout) and self._flush_receipt.is_set()
 
+    def update_credentials(self,values,persist=False):
+        return self._request('apply_credentials',(dict(values),bool(persist)))
+
+    def configure_providers(self,options):
+        with self._lock:
+            old=self.provider_options
+            self.provider_options=normalize_options(options)
+            if hasattr(self,'policy'):self.policy.options=self.provider_options
+        newly_enabled=set(old['disabled'])-set(self.provider_options['disabled'])
+        if newly_enabled:self._request('reset_providers',tuple(newly_enabled))
+
     def _work(self,key,q,force=False,revision=1):
         source_results={}
         statuses={}
-        progress = self.store.provider_progress(key, revision)
+        capabilities={}
+        waiting=[]
+        incomplete=False
+        progress=self.store.provider_progress(key,revision)
+        pool_key=album_cache_key(q)
+        pool=None if force or not pool_key else self.store.get_response(pool_key)
+        checkpoints_complete=all(entry.get('status') in ('ok','cached','COMPLETE') for entry in progress.values())
+        if pool and checkpoints_complete and not self.provider_options.get('exhaustive',False):
+            reusable={}
+            for candidate in pool:
+                src=candidate.get('source')
+                if src not in SOURCES or capability(src,self.credentials,self.provider_options)['state']!='AVAILABLE':continue
+                if norm(candidate.get('title'))==norm(q['title']) and score(q,candidate)[0]>=.93:
+                    reusable.setdefault(src,[]).append(candidate)
+            local=aggregate(q,reusable)
+            if local['auto']['state']=='ready':
+                local.update(status={src:'album_cache' if src in reusable else 'local_match_no_query' for src in SOURCES},
+                    capabilities={src:dict(capability(src,self.credentials,self.provider_options),
+                        reason='album_cache' if src in reusable else 'strong_local_match_no_query') for src in SOURCES},
+                    queried_sources=0,completion='LOCAL_CACHE')
+                return local,q
         for source in SOURCES:
-            if self.stopped:return (None, q)  # preserve queued job for next Picard start
-            if source in progress:
-                entry = progress[source]
-                if entry['status'] != 'running':
-                    statuses[source] = entry['status']
-                    if entry['payload'] is not None:
-                        source_results[source] = entry['payload']
+            if self.stopped:return None,q
+            cap=capability(source,self.credentials,self.provider_options)
+            capabilities[source]=cap
+            if cap['state']!='AVAILABLE':
+                statuses[source]=cap['state']
+                self.store.checkpoint(key,revision,source,None,cap['state'])
+                continue
+            entry=progress.get(source,{})
+            attempts=entry.get('attempts',0)
+            state=entry.get('status','running')
+            if state in ('ok','cached','COMPLETE'):
+                source_results[source]=entry['payload'] or []
+                statuses[source]=state
+                cap.update(observed=True,reason='completed_checkpoint')
+                continue
+            if state in RETRYABLE:
+                if attempts>=3:
+                    statuses[source]=state
+                    cap.update(state=state,reason='retry_exhausted',observed=True)
+                    incomplete=True
                     continue
-            if not self.store.checkpoint(key,revision,source,None,'running'):
-                return (None,q)  # canceled/replaced work cannot launch another provider
-            adapter=ADAPTERS[source]
+                if entry.get('retry_at',0)>time.time():
+                    waiting.append(entry['retry_at'])
+                    statuses[source]=state
+                    cap.update(state=state,reason='persisted_backoff',observed=True)
+                    continue
+            # A newly found strong MusicBrainz result is not a reason to
+            # skip higher-scoring streaming catalogues. Only proven cached
+            # complete decisions take the local-first shortcut above.
+            if source=='lastfm' and q.get('album') and source_results and not force and not (
+                    self.provider_options.get('exhaustive',False)):
+                if aggregate(q,source_results)['auto']['state']=='ready':
+                    statuses[source]='enrichment_not_needed'
+                    cap.update(reason='known_album_strong_sources_no_enrichment_needed')
+                    continue
+            if not self.store.checkpoint(key,revision,source,None,'running',attempts):return None,q
             cache_id=hashlib.sha256((source+'|'+key).encode()).hexdigest()
             cached=None if force else self.store.get_response(cache_id)
             if cached is not None:
                 source_results[source]=cached
                 statuses[source]='cached'
-                self.store.checkpoint(key, revision, source, cached, 'cached')
+                cap.update(observed=True,reason='cached_metadata')
+                self.store.checkpoint(key,revision,source,cached,'cached')
                 continue
             try:
-                # Keep credentials memory-only; never include in cache keys.
-                candidates=adapter(q,self.http.request,self.credentials)
-                if candidates is None:
-                    statuses[source]='not_configured'
-                    self.store.checkpoint(key, revision, source, None, 'not_configured')
-                    continue
-                if not isinstance(candidates,list):raise ValueError('unexpected candidates')
+                if source in self._adapter_locks:
+                    with self._adapter_locks[source]:
+                        candidates=ADAPTERS[source](q,self.policy.request,self.credentials)
+                else:candidates=ADAPTERS[source](q,self.policy.request,self.credentials)
+                if candidates is None:raise ProviderError('credentials_missing')
+                if not isinstance(candidates,list):raise ProviderError('response_invalid')
                 source_results[source]=candidates[:18]
                 self.store.save_response(cache_id,candidates[:18])
                 statuses[source]='ok'
-            except ProviderError as e:
-                statuses[source]=str(e)
-            except Exception as e:
-                statuses[source]='error_'+type(e).__name__
-            self.store.checkpoint(key, revision, source, source_results.get(source), statuses[source])
-            with self._lock:
-                self._rates[source] = self._rates.get(source, 0) + 1
-        if self.stopped:return (None, q)
-        # If the file has no ISRC, streaming catalogues can provide one.
-        # Resolve that exact identifier back to MusicBrainz *without treating
-        # a Spotify/Deezer album ID as a native Picard release ID*.
-        if not source_results.get('musicbrainz') and statuses.get('musicbrainz') in ('ok','cached'):
-            for src in ('spotify','deezer'):
-                other=next((v for v in source_results.get(src,[])
-                            if re.fullmatch(r'[A-Z]{2}[A-Z0-9]{3}[0-9]{7}',v.get('isrc',''))
-                            and similarity(q['title'],v.get('title')) > .92
-                            and similarity(q['artist'],v.get('artist')) > .92),None)
-                if other:
+                cap.update(observed=True,reason='valid_catalog_response')
+                self.store.checkpoint(key,revision,source,candidates[:18],'COMPLETE')
+            except (sqlite3.Error,OSError):
+                raise  # storage errors must pause the scheduler, not masquerade as API failures
+            except Exception as raw:
+                exc=raw if isinstance(raw,ProviderError) else ProviderError('response_invalid')
+                # A quota deferral consumes no attempt: no HTTP request occurred.
+                attempted=exc.attempted
+                count=attempts+int(attempted)
+                delay=max(exc.retry_after, min(180.,5*(2**min(count,5)))+random.uniform(0,1))
+                retry_at=time.time()+delay if exc.state in RETRYABLE and count<3 else 0
+                statuses[source]=exc.state
+                cap.update(state=exc.state,reason=exc.reason,observed=attempted)
+                self.store.provider_failure(source,exc.state,exc.reason,time.time()+delay,
+                    0 if isinstance(raw,ProviderError) else 1,attempted)
+                self.store.checkpoint(key,revision,source,None,exc.state,count,retry_at)
+                if retry_at:waiting.append(retry_at)
+                else:incomplete=incomplete or exc.state in RETRYABLE
+            if statuses.get(source)=='ok':
+                with self._lock:self._rates[source]=self._rates.get(source,0)+1
+        if self.stopped:return None,q
+        # Preserve source-neutral exact-ISRC → native MusicBrainz resolution.
+        # This subtask shares the provider budget and durable retry cursor.
+        if not source_results.get('musicbrainz') and statuses.get('musicbrainz') in ('ok','cached','COMPLETE'):
+            other=next((c for source in ('spotify','deezer') for c in source_results.get(source,[])
+                        if re.fullmatch(r'[A-Z]{2}[A-Z0-9]{3}[0-9]{7}',c.get('isrc','')) and
+                        similarity(q['title'],c.get('title'))>.92 and similarity(q['artist'],c.get('artist'))>.92),None)
+            if other:
+                sub='musicbrainz_cross_isrc'
+                entry=progress.get(sub,{})
+                cap=capabilities['musicbrainz']
+                count=entry.get('attempts',0)
+                if entry.get('status')=='COMPLETE':
+                    source_results['musicbrainz']=entry['payload'] or []
+                elif entry.get('status') in RETRYABLE and count>=3:
+                    incomplete=True
+                    cap.update(state=entry['status'],reason='isrc_resolution_retry_exhausted')
+                elif entry.get('retry_at',0)>time.time():
+                    waiting.append(entry['retry_at'])
+                    cap.update(state=entry['status'],reason='isrc_resolution_backoff')
+                else:
                     try:
-                        q2={**q,'isrc':other['isrc']}
-                        candidates=ADAPTERS['musicbrainz'](q2,self.http.request,self.credentials)
-                        source_results['musicbrainz']=candidates[:18]
+                        if not self.store.checkpoint(key,revision,sub,None,'running',count):return None,q
+                        with self._adapter_locks['musicbrainz']:
+                            resolved=ADAPTERS['musicbrainz']({**q,'isrc':other['isrc']},self.policy.request,self.credentials)
+                        source_results['musicbrainz']=resolved[:18]
+                        self.store.checkpoint(key,revision,sub,resolved[:18],'COMPLETE')
                         statuses['musicbrainz']='ok_crosssource_isrc'
-                    except ProviderError as exc:
-                        statuses['musicbrainz']='crosssource_'+str(exc)
-                    except Exception as exc:
-                        statuses['musicbrainz']='crosssource_error_'+type(exc).__name__
-                    break
+                    except (sqlite3.Error,OSError):raise
+                    except Exception as raw:
+                        exc=raw if isinstance(raw,ProviderError) else ProviderError('response_invalid')
+                        count+=int(exc.attempted)
+                        retry_at=time.time()+max(exc.retry_after,5*2**min(count,5))+random.uniform(0,1) if (
+                            exc.state in RETRYABLE and count<3) else 0
+                        self.store.checkpoint(key,revision,sub,None,exc.state,count,retry_at)
+                        cap.update(state=exc.state,reason='isrc_resolution_'+exc.reason,observed=exc.attempted)
+                        if retry_at:waiting.append(retry_at)
+                        else:incomplete=True
         joined=aggregate(q,source_results)
-        joined['status']=statuses
-        joined['queried_sources']=len(source_results)
-        return (joined, q)
+        joined.update(status=statuses,capabilities=capabilities,queried_sources=len(source_results),
+                      completion='PENDING' if waiting else 'INCOMPLETE' if incomplete else 'COMPLETE')
+        if waiting or incomplete:
+            joined['auto']={'state':'pending_providers' if waiting else 'incomplete_providers',
+                            'reason':'Provider responses are unfinished or unavailable; review only.'}
+            joined['verdict']='review'
+        if waiting:joined['_defer_until']=min(waiting)
+        if pool_key and source_results and joined['completion']=='COMPLETE':
+            # Bounded album-local normalized candidate pool. It contains text
+            # metadata only; no artwork, credentials or raw API bodies.
+            rows=list(pool or [])+[c for values in source_results.values() for c in values]
+            unique={json.dumps(c,sort_keys=True):c for c in rows}
+            self.store.save_response(pool_key,list(unique.values())[-200:])
+        return joined,q
 
     def status(self):
         with self._lock:
@@ -746,6 +966,7 @@ class UniversalAggregator:
                     'flushed':self._flush_receipt.is_set(),
                     'stopped':self._stop_receipt.is_set(),
                     'provider_rate':{k:v/elapsed for k,v in self._rates.items()},
+                    'capabilities':dict(self._capabilities),
                     'provider_eta':{k:(self._counts['queued']*elapsed/v if v else None)
                                     for k,v in self._rates.items()}}
 
