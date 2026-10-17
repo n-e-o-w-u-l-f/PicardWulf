@@ -326,4 +326,58 @@ class SaveTrackingTests(unittest.TestCase):
                 tracking.restore_backup_copy(rec,src)
             self.assertEqual(src.read_bytes(),before)
 
+
+class GoldRetirementTrackingGates(unittest.TestCase):
+    def receipt(self, directory):
+        src=Path(directory)/'gold.flac'
+        src.write_bytes(b'disposable-flac-placeholder-for-callback-test')
+        with patch.dict(os.environ,{'LOCALAPPDATA':str(directory)}):
+            receipt=workflow.backup_envelope(str(src))
+        return src,receipt
+
+    def test_success_path_unblocks_only_after_verified_post_save(self):
+        with tempfile.TemporaryDirectory() as directory:
+            src,receipt=self.receipt(directory)
+            file=FakeFile(src)
+            tracker=tracking.SaveTracker()
+            try:
+                tracker.register(file,receipt,{'title':'Saved'})
+                self.assertEqual(tracker.path_state(str(src)),'PENDING')
+                self.assertTrue(tracker.has_inflight())
+                mock=types.ModuleType('mutagen')
+                mock.File=lambda *args,**kwargs:FakeAudio({'title':['Saved']})
+                with patch.dict(sys.modules,{'mutagen':mock}):
+                    tracker.post_save(file)
+                    wait_state(tracker,'VERIFIED')
+                self.assertEqual(tracker.path_state(str(src)),'VERIFIED')
+                self.assertFalse(tracker.has_inflight())
+            finally:tracker.close()
+
+    def test_mismatched_tags_block_gold_even_after_save_callback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            src,receipt=self.receipt(directory)
+            file=FakeFile(src)
+            tracker=tracking.SaveTracker()
+            try:
+                tracker.register(file,receipt,{'title':'Expected'})
+                mock=types.ModuleType('mutagen')
+                mock.File=lambda *args,**kwargs:FakeAudio({'title':['Different']})
+                with patch.dict(sys.modules,{'mutagen':mock}):
+                    tracker.post_save(file)
+                    wait_state(tracker,'MISMATCH')
+                self.assertEqual(tracker.path_state(str(src)),'MISMATCH')
+                self.assertFalse(tracker.has_inflight())
+            finally:tracker.close()
+
+    def test_expired_save_keeps_failure_marker(self):
+        with tempfile.TemporaryDirectory() as directory:
+            src,receipt=self.receipt(directory)
+            file=FakeFile(src)
+            tracker=tracking.SaveTracker(save_timeout=-1)
+            try:
+                tracker.register(file,receipt,{'title':'Expected'})
+                self.assertEqual(tracker.status()['pending'],0)
+                self.assertEqual(tracker.path_state(str(src)),'UNKNOWN_TIMEOUT')
+            finally:tracker.close()
+
 if __name__=='__main__':unittest.main()
