@@ -234,8 +234,13 @@ def import_staged_flac(source, destination, *,
             # Full decoder validation belongs INSIDE the replacement
             # transaction so a failing post-commit stream restores the prior
             # canonical FLAC rather than merely leaving a backup behind.
-            result = replace_smaller_flac(target, original, recovery,
-                                          inspect=inspect, decode=decode)
+            try:
+                result = replace_smaller_flac(target, original, recovery,
+                                              inspect=inspect, decode=decode)
+            except RetentionRejected as exc:
+                # Give the calling Picard action one documented failure class
+                # while preserving the root cause and independent backup.
+                raise StagedImportRejected(str(exc)) from exc
             if result.get("action") != "REPLACED":
                 raise StagedImportRejected("Collision changed before replacement")
             return dict(result, source_preserved=str(original))
