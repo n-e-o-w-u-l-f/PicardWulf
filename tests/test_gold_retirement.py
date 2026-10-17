@@ -168,6 +168,28 @@ class GoldTests(unittest.TestCase):
             file.metadata['genre'] = ['Techno', 'Gabber']
             self.assertIsNone(gold.capture_gold(album, tagger, tracker))
 
+    def test_real_picard_getall_separates_multivalues(self):
+        class PicardMetadata:
+            def __init__(self, values):
+                self.values=values
+            def getall(self, key):
+                return self.values.get(key, [])
+            def get(self, key, default=''):
+                return '; '.join(self.getall(key)) or default
+
+        with tempfile.TemporaryDirectory() as root:
+            _, file, album, tagger, tracker = self.prepared(root)
+            file.metadata=PicardMetadata({**{k:[v] for k,v in fields().items()},
+                                          'genre':['Techno','Hardcore']})
+            file.orig_metadata=PicardMetadata({**{k:[v] for k,v in fields().items()},
+                                               'genre':['Techno','Gabber']})
+            self.assertIsNone(gold.capture_gold(album, tagger, tracker))
+            file.orig_metadata=PicardMetadata({**{k:[v] for k,v in fields().items()},
+                                               'genre':['Techno','Hardcore']})
+            snapshot=gold.capture_gold(album,tagger,tracker)
+            self.assertIsNotNone(snapshot)
+            self.assertIn(('genre',('Techno','Hardcore')),snapshot[1][0][1])
+
     def test_disk_readback_all_multivalues_must_match(self):
         with tempfile.TemporaryDirectory() as root:
             _, file, album, tagger, tracker = self.prepared(root)
