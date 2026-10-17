@@ -119,6 +119,9 @@ def show_safe_import(api, selected_files, tracker=None):
         fut = session["future"]
         if fut is None or not fut.done():
             return
+        # QMessageBox.question() runs a nested Qt event loop. Stop the timer
+        # before it opens so reentrant delivery cannot confirm twice.
+        timer.stop()
         try:
             outcome = fut.result()
             if session["phase"] == "preview":
@@ -151,6 +154,7 @@ def show_safe_import(api, selected_files, tracker=None):
                     return
                 session["phase"] = "apply"
                 session["future"] = pool.submit(import_staged_flac, **params, apply=True)
+                timer.start()
                 return
             QMessageBox.information(
                 None, "PicardWulf – Import abgeschlossen",
