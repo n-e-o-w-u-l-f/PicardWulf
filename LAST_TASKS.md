@@ -6,7 +6,7 @@ Updated: 2026-10-17 · Project: `n-e-o-w-u-l-f/PicardWulf`
 
 - Nach fehlgeschlagener Post-Commit-SHA-256- oder Decoderprüfung wird die vorherige FLAC jetzt **tatsächlich** aus dem separaten Backup wiederhergestellt; fehlerhafte Wiederherstellung bleibt explizit UNVERIFIED.
 - PicardWulf-eigene Auto-/manuelle `File.save()` erfordern `rename_files=False` und `move_files=False`; Toggle verweigert risikoreiche Aktivierung ohne Änderung an Picard.ini/Preset 3.
-- **326 Tests PASS**, Legion-HEAD `d5d3e2daa224c9f40914d4af71798a2e2e551fe0`; **BMAX und natives Ctrl+S weiter OPEN**. PR #1 DRAFT.
+- **333 Tests PASS**, Legion-HEAD `877c6887e25b794ee82c9570e634568dd3a83faa`; Vorschau/Übernahme durch SHA und Dateisignaturen gekoppelt; **BMAX und natives Ctrl+S OPEN**. PR #1 DRAFT.
 
 ## 2026-10-17 · Picard-Dateiaktion und BMAX-Audit
 
