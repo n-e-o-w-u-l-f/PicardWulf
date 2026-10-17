@@ -123,7 +123,10 @@ class ControllerTests(unittest.TestCase):
         tagger=types.SimpleNamespace(window=window,albums={album.id:album})
         logger=types.SimpleNamespace(info=lambda *a:None, warning=lambda *a:None)
         self.removed=[]
-        return types.SimpleNamespace(tagger=tagger,logger=logger),album
+        return types.SimpleNamespace(
+            tagger=tagger,logger=logger,
+            global_config=types.SimpleNamespace(
+                setting={'remove_complete_albums_after_save':False})),album
 
     def run_case(self,valid=True,mutate=None):
         with tempfile.TemporaryDirectory() as directory:
@@ -143,6 +146,78 @@ class ControllerTests(unittest.TestCase):
                         mutate(tracker,album)
                     controller.finished.flush() # Simulate Qt queued delivery on UI thread.
                     return list(self.removed),album
+                finally:
+                    controller.stop()
+
+    def test_native_picard_auto_removal_or_unknown_option_blocks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            api,album=self.context(directory)
+            tracker=Tracker()
+            with patch.dict(sys.modules,qt_stub()), patch.object(gold,'verify_gold_files') as worker:
+                controller=gold.start_gold_retirement(api,tracker)
+                try:
+                    for settings in ({'remove_complete_albums_after_save': True},
+                                     {}):
+                        api.global_config.setting=settings
+                        controller.tick()
+                        self.assertIsNone(controller._pending)
+                        self.assertEqual(self.removed,[])
+                        worker.assert_not_called()
+                    api.global_config.setting={'remove_complete_albums_after_save':False}
+                    controller.tick()
+                    self.assertIsNotNone(controller._pending)
+                finally:
+                    controller.stop()
+
+    def test_native_option_enabled_during_verification_prevents_ui_removal(self):
+        with tempfile.TemporaryDirectory() as directory:
+            api,album=self.context(directory)
+            tracker=Tracker()
+            with patch.dict(sys.modules,qt_stub()), patch.object(
+                    gold,'verify_gold_files',return_value=True):
+                controller=gold.start_gold_retirement(api,tracker)
+                try:
+                    controller.tick()
+                    until=time.monotonic()+5
+                    while not controller.finished.messages and time.monotonic()<until:
+                        time.sleep(.005)
+                    self.assertTrue(controller.finished.messages)
+                    api.global_config.setting['remove_complete_albums_after_save']=True
+                    controller.finished.flush()
+                    self.assertEqual(self.removed,[])
+                finally:
+                    controller.stop()
+
+    def test_bounded_album_registry_scan_never_materializes_every_album(self):
+        with tempfile.TemporaryDirectory() as directory:
+            api,album=self.context(directory)
+            tracker=Tracker()
+            class MeasuredRegistry(dict):
+                scanned=0
+                def values(self):
+                    for value in super().values():
+                        self.scanned+=1
+                        yield value
+            registry=MeasuredRegistry()
+            for n in range(2500):
+                registry[str(n)]=types.SimpleNamespace(id=str(n),loaded=False)
+            api.tagger.albums=registry
+            with patch.dict(sys.modules,qt_stub()), patch.object(
+                    gold,'verify_gold_files') as worker:
+                controller=gold.start_gold_retirement(api,tracker)
+                try:
+                    controller.tick()
+                    self.assertEqual(registry.scanned,100)
+                    controller.tick()
+                    self.assertEqual(registry.scanned,200)
+                    worker.assert_not_called()
+                    # Adding an album invalidates a dict iterator; next
+                    # bounded scan must not throw or retire stale objects.
+                    registry['new']=types.SimpleNamespace(id='new',loaded=False)
+                    controller.tick()
+                    controller.tick()
+                    self.assertLessEqual(registry.scanned,300)
+                    self.assertEqual(self.removed,[])
                 finally:
                     controller.stop()
 
