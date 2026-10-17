@@ -91,11 +91,57 @@ class TestContract(unittest.TestCase):
         before=api.global_config.setting['file_renaming_scripts']['a']['script']
         with patch.object(plugin,'AutoApplyController'), patch.object(plugin,'UniversalAggregator'):
             plugin.enable(api)
-        self.assertEqual(len(api.registered),20)
+        self.assertEqual(len(api.registered),22)
+        self.assertEqual(len([x for x in api.registered if x[0]=='file_action']),3)
         self.assertEqual(sum(x[0]=='file_saved_event' for x in api.registered),1)
         self.assertTrue(api.plugin_config['auto_apply_best'])
         self.assertFalse(api.plugin_config['auto_save_with_backup'])
         self.assertEqual(api.global_config.setting['file_renaming_scripts']['a']['script'],before)
+    def test_auto_save_toggle_refuses_unsafe_native_move(self):
+        api=Api()
+        api.global_config.setting.update({'rename_files':False,'move_files':True})
+        action=plugin.AutoSaveToggle()
+        action.api=api
+        FakeMessageBox.answer=FakeMessageBox.StandardButton.Yes
+        action.callback([])
+        self.assertFalse(api.plugin_config.get('auto_save_with_backup',False))
+        self.assertTrue(any(
+            entry[0]=='warn' and 'Umbenennen' in str(entry[1])
+            for entry in FakeMessageBox.messages))
+
+    def test_auto_save_toggle_allows_tag_only_mode(self):
+        api=Api()
+        api.global_config.setting.update({'rename_files':False,'move_files':False})
+        action=plugin.AutoSaveToggle()
+        action.api=api
+        FakeMessageBox.answer=FakeMessageBox.StandardButton.Yes
+        action.callback([])
+        self.assertTrue(api.plugin_config.get('auto_save_with_backup',False))
+
+    def test_gold_status_exposes_native_early_retirement_warning(self):
+        api=Api()
+        api.global_config.setting['remove_complete_albums_after_save']=True
+        with patch.object(plugin,'AutoApplyController'), patch.object(plugin,'UniversalAggregator'):
+            plugin.enable(api)
+        action=plugin.TagSaveStatus()
+        action.api=api
+        action.callback([])
+        text=' '.join(str(x) for x in FakeMessageBox.messages)
+        self.assertIn('GESPERRT',text)
+        self.assertIn('PicardWulf-Prüfung',text)
+
+    def test_gold_status_does_not_claim_active_without_controller(self):
+        api=Api()
+        api.global_config.setting['remove_complete_albums_after_save']=False
+        with patch.object(plugin,'AutoApplyController'), patch.object(plugin,'UniversalAggregator'):
+            plugin.enable(api)
+        action=plugin.TagSaveStatus()
+        action.api=api
+        action.callback([])
+        text=' '.join(str(x) for x in FakeMessageBox.messages)
+        self.assertIn('NICHT GESTARTET',text)
+        self.assertNotIn('GESPERRT',text)
+
     def test_picard_v3_post_save_hook_dispatches_to_tracker(self):
         api=Api()
         with patch.object(plugin,'AutoApplyController'), patch.object(plugin,'UniversalAggregator'):
@@ -106,6 +152,22 @@ class TestContract(unittest.TestCase):
         with patch.object(plugin._save_tracker,'post_save',return_value=True) as saved:
             events[0][1](api,witness)
         saved.assert_called_once_with(witness)
+
+    def test_safe_import_file_action_dispatches_selected_files_and_tracker(self):
+        api=Api()
+        with patch.object(plugin,'AutoApplyController'), patch.object(plugin,'UniversalAggregator'):
+            plugin.enable(api)
+        actions=[item[1] for item in api.registered if item[0]=='file_action']
+        matches=[cls for cls in actions if cls.TITLE.startswith(
+            'PicardWulf: FLAC sicher in Musikbibliothek')]
+        self.assertEqual(len(matches),1)
+        action=matches[0]()
+        action.api=api
+        from neowulf_picard_repair import picard_safe_import
+        files=[object()]
+        with patch.object(picard_safe_import,'show_safe_import',return_value=True) as dispatched:
+            action.callback(files)
+        dispatched.assert_called_once_with(api,files,plugin._save_tracker)
 
     def test_context_menu_registers_album_and_cluster_multisource_action(self):
         api=Api()

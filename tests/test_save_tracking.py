@@ -29,6 +29,10 @@ def wait_state(tracker, desired, deadline=5):
         time.sleep(.01)
     raise AssertionError((desired,tracker.status()))
 
+def wait_state_after_post_save(tracker, file, desired):
+    tracker.post_save(file)
+    return wait_state(tracker, desired)
+
 class FakeFile:
     def __init__(self,path):
         self.filename=str(path)
@@ -260,6 +264,38 @@ class SaveTrackingTests(unittest.TestCase):
                 self.assertEqual(src.read_bytes(),before)
             finally:tr.close()
 
+    def test_retention_callback_runs_only_after_verified_save(self):
+        with tempfile.TemporaryDirectory() as directory:
+            src,rec=self.receipt(directory)
+            f=FakeFile(src)
+            called=[]
+            mock=types.ModuleType('mutagen')
+            mock.File=lambda *a,**k:FakeAudio({'title':['Verified']})
+            tr=tracking.SaveTracker(on_verified=lambda p:(called.append(p) or
+                    {'action':'REMOVED','reason':'test_only','backup':'test.manifest'}))
+            try:
+                tr.register(f,rec,{'title':'Verified'})
+                with patch.dict(sys.modules,{'mutagen':mock}):
+                    tr.post_save(f)
+                    self.assertEqual(wait_state(tr,'MP3_REMOVED')['reason'],'test_only')
+                self.assertEqual(called,[str(src)])
+            finally:tr.close()
+
+    def test_retention_callback_not_called_after_tag_mismatch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            src,rec=self.receipt(directory)
+            f=FakeFile(src)
+            called=[]
+            mock=types.ModuleType('mutagen')
+            mock.File=lambda *a,**k:FakeAudio({'title':['Wrong']})
+            tr=tracking.SaveTracker(on_verified=lambda p:called.append(p))
+            try:
+                tr.register(f,rec,{'title':'Expected'})
+                with patch.dict(sys.modules,{'mutagen':mock}):
+                    self.assertEqual(wait_state_after_post_save(tr,f,'MISMATCH')['state'],'MISMATCH')
+                self.assertEqual(called,[])
+            finally:tr.close()
+
     def test_post_save_renamed_target_is_read_from_actual_picard_filename(self):
         with tempfile.TemporaryDirectory() as directory:
             src,rec=self.receipt(directory)
@@ -289,5 +325,59 @@ class SaveTrackingTests(unittest.TestCase):
             with self.assertRaises(workflow.UnsafeCandidate):
                 tracking.restore_backup_copy(rec,src)
             self.assertEqual(src.read_bytes(),before)
+
+
+class GoldRetirementTrackingGates(unittest.TestCase):
+    def receipt(self, directory):
+        src=Path(directory)/'gold.flac'
+        src.write_bytes(b'disposable-flac-placeholder-for-callback-test')
+        with patch.dict(os.environ,{'LOCALAPPDATA':str(directory)}):
+            receipt=workflow.backup_envelope(str(src))
+        return src,receipt
+
+    def test_success_path_unblocks_only_after_verified_post_save(self):
+        with tempfile.TemporaryDirectory() as directory:
+            src,receipt=self.receipt(directory)
+            file=FakeFile(src)
+            tracker=tracking.SaveTracker()
+            try:
+                tracker.register(file,receipt,{'title':'Saved'})
+                self.assertEqual(tracker.path_state(str(src)),'PENDING')
+                self.assertTrue(tracker.has_inflight())
+                mock=types.ModuleType('mutagen')
+                mock.File=lambda *args,**kwargs:FakeAudio({'title':['Saved']})
+                with patch.dict(sys.modules,{'mutagen':mock}):
+                    tracker.post_save(file)
+                    wait_state(tracker,'VERIFIED')
+                self.assertEqual(tracker.path_state(str(src)),'VERIFIED')
+                self.assertFalse(tracker.has_inflight())
+            finally:tracker.close()
+
+    def test_mismatched_tags_block_gold_even_after_save_callback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            src,receipt=self.receipt(directory)
+            file=FakeFile(src)
+            tracker=tracking.SaveTracker()
+            try:
+                tracker.register(file,receipt,{'title':'Expected'})
+                mock=types.ModuleType('mutagen')
+                mock.File=lambda *args,**kwargs:FakeAudio({'title':['Different']})
+                with patch.dict(sys.modules,{'mutagen':mock}):
+                    tracker.post_save(file)
+                    wait_state(tracker,'MISMATCH')
+                self.assertEqual(tracker.path_state(str(src)),'MISMATCH')
+                self.assertFalse(tracker.has_inflight())
+            finally:tracker.close()
+
+    def test_expired_save_keeps_failure_marker(self):
+        with tempfile.TemporaryDirectory() as directory:
+            src,receipt=self.receipt(directory)
+            file=FakeFile(src)
+            tracker=tracking.SaveTracker(save_timeout=-1)
+            try:
+                tracker.register(file,receipt,{'title':'Expected'})
+                self.assertEqual(tracker.status()['pending'],0)
+                self.assertEqual(tracker.path_state(str(src)),'UNKNOWN_TIMEOUT')
+            finally:tracker.close()
 
 if __name__=='__main__':unittest.main()

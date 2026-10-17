@@ -154,6 +154,7 @@ def _album_guard(api, album, metadata, release_node):
 _aggregator = None
 _controller = None
 _save_tracker = None
+_gold_controller = None
 _retiring_engine = None
 
 
@@ -200,6 +201,34 @@ def _original_file_snapshot(file):
                 filename=getattr(file,'filename','')
             return _file_snapshot(_Original())
     return _file_snapshot(file)
+
+
+def _retire_mp3_after_verified_flac(path):
+    """Worker-only: remove matching MP3 only after a verified FLAC save.
+
+    Keep an independently SHA-256-verified recovery copy outside the music
+    folder. Missing flac CLI or uncertain metadata means no deletion.
+    """
+    if not path:
+        return None
+    flac=Path(path)
+    if flac.suffix.casefold()!='.flac':
+        return None
+    mp3=flac.with_suffix('.mp3')
+    if not mp3.is_file():
+        return None
+    from .retention_policy import decide_mp3_removal, remove_verified_mp3
+    decision=decide_mp3_removal(mp3,flac)
+    if decision['action']!='REMOVE':
+        return decision
+    from .native_workflow import backup_envelope
+    from .save_tracking import verify_pre_save_identity
+    receipt=backup_envelope(str(mp3))
+    verify_pre_save_identity(receipt,str(mp3))
+    outcome=remove_verified_mp3(mp3,flac,backup_receipt=receipt)
+    if outcome['action']=='REMOVED':
+        outcome['backup']=receipt['manifest']
+    return outcome
 
 
 def _file_saved(api, file):
@@ -533,11 +562,24 @@ class TagSaveStatus(BaseAction):
             return
         status=_save_tracker.status()
         totals=', '.join(f'{entry["state"]}' for entry in status['recent'][-8:])
+        from .gold_retirement import native_gold_retirement_allowed
+        if not self.api.plugin_config.get('gold_auto_retire', True):
+            gold_state='AUS (PicardWulf-Einstellung)'
+        elif not native_gold_retirement_allowed(self.api):
+            gold_state=('GESPERRT: Picards eigene Option "Vollständige Alben nach dem '
+                        'Speichern entfernen" ist aktiv oder nicht verifizierbar. '
+                        'Picard kann ohne unabhängige PicardWulf-Prüfung entfernen; '
+                        'diese native Option zuerst in Picard deaktivieren.')
+        elif _gold_controller is None:
+            gold_state='NICHT GESTARTET (Plugin oder Qt-Controller prüfen)'
+        else:
+            gold_state='AKTIV (nur nach unabhängiger FLAC-Prüfung)'
         _show('PicardWulf – Tag-Speicherstatus',
               f'Ausstehende Picard-Speicherungen: {status["pending"]}\n'
               f'Laufende Dateiprüfungen: {status["verifying"]}\n'
               f'Laufende Wiederherstellungen: {status["restoring"]}\n'
-              f'Letzte Prüfergebnisse: {totals or "keine"}\n\n'
+              f'Letzte Prüfergebnisse: {totals or "keine"}\n'
+              f'Goldene CD automatisch aus der Ansicht: {gold_state}\n\n'
               'VERIFIED bedeutet Post-Save-Ereignis plus übereinstimmend '
               'zurückgelesene Tags und intakte Sicherung. '
               'UNVERIFIED oder MISMATCH bedeutet NICHT bestätigt. '
@@ -578,6 +620,33 @@ class SelectedFileReview(BaseAction):
 
 
 
+class NativeCollisionPreview(BaseAction):
+    TITLE = 'PicardWulf: Dateikollisionen / FLAC-Größenregel prüfen (nur lesen)'
+
+    def callback(self, objs):
+        try:
+            from .collision_preview import show_collision_preview
+            show_collision_preview(self.api, objs)
+        except Exception as exc:
+            self.api.logger.warning('PicardWulf native collision preview failed: %s',
+                                    type(exc).__name__)
+            _show('PicardWulf – Dateikollisionen',
+                  'Kollisionsprüfung nicht verfügbar; keine Dateien verändert.', 'warning')
+
+
+class SafeStagedFlacImport(BaseAction):
+    TITLE = 'PicardWulf: FLAC sicher in Musikbibliothek übernehmen (mit Backup)'
+
+    def callback(self, objs):
+        try:
+            from .picard_safe_import import show_safe_import
+            show_safe_import(self.api, objs, _save_tracker)
+        except Exception as exc:
+            self.api.logger.warning('PicardWulf safe FLAC import: %s', type(exc).__name__)
+            _show('PicardWulf – Sicherer FLAC-Import',
+                  'Import konnte nicht gestartet werden; keine Erfolgsmeldung.', 'warning')
+
+
 class AutoApplyToggle(BaseAction):
     TITLE = 'Automatische Release-Auswahl ein-/ausschalten'
     MENU = ('PicardWulf',)
@@ -607,6 +676,19 @@ class AutoSaveToggle(BaseAction):
             self.api.plugin_config['auto_save_with_backup']=False
             _show('PicardWulf', 'Automatisches Speichern: AUS. Auto-Auswahl bleibt aktiv.')
             return
+        from .retention_policy import require_native_tag_only, RetentionRejected
+        try:
+            require_native_tag_only(self.api.global_config.setting)
+        except RetentionRejected:
+            _show('PicardWulf – Automatisches Speichern gesperrt',
+                  'Picards natives Umbenennen oder Verschieben ist aktiv oder '
+                  'die Einstellungen sind nicht verifizierbar. '
+                  'Damit könnte File.save() die geprüfte FLAC-Kollisionsregel '
+                  'umgehen. Für reine Tag-Speicherung die Picard-Optionen '
+                  '"Dateien umbenennen" und "Dateien verschieben" deaktivieren; '
+                  'zur sicheren Bibliotheksübernahme die separate '
+                  'PicardWulf-FLAC-Importaktion verwenden.', 'warning')
+            return
         notice=('Automatisches SPEICHERN von Musikdateien aktivieren?\n\n'
                 'Nur der eindeutige höchstbewertete Release-Treffer wird ausgewählt. '
                 'Vor jedem Speichern wird die vollständige Original-Audiodatei '
@@ -623,12 +705,14 @@ class AutoSaveToggle(BaseAction):
                   'Asynchrone Speichervorgänge und mögliche Umbenennungen in Picard prüfen.')
 
 def enable(api):
-    global _aggregator, _controller, _save_tracker
+    global _aggregator, _controller, _save_tracker, _gold_controller
     api.register_tools_menu_action(Inspect)
     api.register_tools_menu_action(Repair)
     api.register_album_metadata_processor(_album_guard, priority=-1000)
     api.plugin_config.register_option('auto_apply_best', True)
     api.plugin_config.register_option('auto_save_with_backup', False)
+    api.plugin_config.register_option('flac_only_cleanup', True)
+    api.plugin_config.register_option('gold_auto_retire', True)
     api.plugin_config.register_option('search_paused', False)
     api.plugin_config.register_option('sqlite_batch_size', 256)
     api.plugin_config.register_option('disabled_providers', [])
@@ -644,7 +728,8 @@ def enable(api):
         _aggregator = None
         api.logger.error('Universal aggregator initialization failed: %s', type(exc).__name__)
         return
-    _save_tracker=SaveTracker()
+    _save_tracker=SaveTracker(on_verified=(_retire_mp3_after_verified_flac if
+        api.plugin_config.get('flac_only_cleanup',True) else None))
     api.register_file_post_save_processor(_file_saved)
     try:
         _controller = AutoApplyController(api, _aggregator, _file_snapshot,
@@ -659,6 +744,16 @@ def enable(api):
         api.logger.error('Automatic matching initialization failed: %s',type(exc).__name__)
     api.register_file_post_load_processor(_file_loaded)
     api.register_track_metadata_processor(_track_loaded, priority=-1000)
+    # Gold retirement is stricter than Picard's native complete-album option:
+    # actual FLAC tags are checked off-GUI before invoking UI-only removal.
+    # No auto-removal in headless/mock contexts without an actual Qt window.
+    if getattr(api.tagger, 'window', None) is not None and api.plugin_config.get('gold_auto_retire', True):
+        try:
+            from .gold_retirement import start_gold_retirement
+            _gold_controller = start_gold_retirement(api, _save_tracker)
+        except Exception as exc:
+            _gold_controller = None
+            api.logger.error('PicardWulf gold retirement not started: %s', type(exc).__name__)
     api.register_tools_menu_action(SourceStatus)
     api.register_tools_menu_action(ProviderPolicyAction)
     api.register_tools_menu_action(CredentialsAction)
@@ -671,12 +766,21 @@ def enable(api):
     api.register_album_action(SimilarAlbumsAllSources)
     api.register_tools_menu_action(NativeReview)
     api.register_file_action(SelectedFileReview)
+    api.register_file_action(NativeCollisionPreview)
+    api.register_file_action(SafeStagedFlacImport)
     api.register_tools_menu_action(AutoApplyToggle)
     api.register_tools_menu_action(AutoSaveToggle)
 
 
 def disable():
-    global _aggregator, _controller, _retiring_engine, _save_tracker
+    global _aggregator, _controller, _retiring_engine, _save_tracker, _gold_controller
+    from .collision_preview import stop_collision_previews
+    stop_collision_previews()
+    from .picard_safe_import import stop_safe_imports
+    stop_safe_imports()
+    if _gold_controller is not None:
+        _gold_controller.stop()
+        _gold_controller = None
     if _controller is not None:
         _controller.stop()
     _controller=None

@@ -130,10 +130,44 @@ class TestAutomaticWriting(unittest.TestCase):
             result=auto.apply_best_to_file(f,Q,self.result(),save=True,
                 verified_backup={'path':f.filename,'backup':'saved-audio.flac',
                                  'sha256':'a'*64,'size':1000,'mtime_ns':1},
-                save_tracker=tracker)
+                save_tracker=tracker,
+                native_settings={'rename_files':False,'move_files':False})
         self.assertTrue(tracker.registered)
         self.assertEqual(events,['backup','save'])
         self.assertEqual(result['backup'],'saved-audio.flac')
+
+    def test_native_rename_blocks_automatic_save_before_tag_mutation(self):
+        f=DummyFile()
+        before=dict(f.metadata)
+        class Tracker:
+            called=False
+            def register(self,*args,**kwargs):
+                self.called=True
+        tracker=Tracker()
+        with self.with_fake_api():
+            with self.assertRaises(nw.UnsafeCandidate) as err:
+                auto.apply_best_to_file(
+                    f,Q,self.result(),save=True,
+                    verified_backup={'path':f.filename,'backup':'backup.flac','sha256':'a'*64,
+                                     'size':1000,'mtime_ns':1},
+                    save_tracker=tracker,
+                    native_settings={'rename_files':True,'move_files':False})
+        self.assertIn('tag-only',str(err.exception))
+        self.assertEqual(dict(f.metadata),before)
+        self.assertEqual(f.saves,0)
+        self.assertFalse(tracker.called)
+
+    def test_missing_native_settings_blocks_automatic_save(self):
+        f=DummyFile()
+        before=dict(f.metadata)
+        with self.with_fake_api():
+            with self.assertRaises(nw.UnsafeCandidate):
+                auto.apply_best_to_file(f,Q,self.result(),save=True,
+                    verified_backup={'path':f.filename,'backup':'backup.flac','sha256':'a'*64,
+                                     'size':1000,'mtime_ns':1},
+                    save_tracker=object())
+        self.assertEqual(f.metadata,before)
+        self.assertEqual(f.saves,0)
 
     def test_backup_failure_does_not_mutate_tags(self):
         f=DummyFile()
