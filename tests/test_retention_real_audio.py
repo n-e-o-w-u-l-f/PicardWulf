@@ -134,10 +134,22 @@ class RealAudioRetentionTests(unittest.TestCase):
             bigger.save()
             self.assertGreater(incoming.stat().st_size,canonical.stat().st_size)
             opts={'staging_root':staging,'library_root':library,'recovery_root':backup}
-            self.assertEqual(importer.import_staged_flac(incoming,canonical,**opts)
-                             ['action'],'WOULD_REPLACE')
+            preview=importer.import_staged_flac(incoming,canonical,**opts)
+            self.assertEqual(preview['action'],'WOULD_REPLACE')
             original=canonical.read_bytes()
-            result=importer.import_staged_flac(incoming,canonical,apply=True,**opts)
+            # Mutagen editing of a *real* valid FLAC changes audio-file bytes
+            # between the user's read-only review and actual confirmation.
+            edited=FLAC(str(incoming))
+            edited['comment']='Changed after preview '+('Y'*65536)
+            edited.save()
+            with self.assertRaises(importer.StagedImportRejected):
+                importer.import_staged_flac(
+                    incoming,canonical,apply=True,expected_preview=preview,**opts)
+            self.assertEqual(canonical.read_bytes(),original)
+            self.assertEqual(list(backup.iterdir()),[])
+            preview=importer.import_staged_flac(incoming,canonical,**opts)
+            result=importer.import_staged_flac(
+                incoming,canonical,apply=True,expected_preview=preview,**opts)
             self.assertEqual(result['action'],'REPLACED')
             self.assertEqual(canonical.read_bytes(),incoming.read_bytes())
             self.assertEqual(Path(result['backup']).read_bytes(),original)
