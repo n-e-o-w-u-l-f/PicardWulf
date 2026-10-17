@@ -634,6 +634,19 @@ class NativeCollisionPreview(BaseAction):
                   'Kollisionsprüfung nicht verfügbar; keine Dateien verändert.', 'warning')
 
 
+class SafeStagedFlacImport(BaseAction):
+    TITLE = 'PicardWulf: FLAC sicher in Musikbibliothek übernehmen (mit Backup)'
+
+    def callback(self, objs):
+        try:
+            from .picard_safe_import import show_safe_import
+            show_safe_import(self.api, objs, _save_tracker)
+        except Exception as exc:
+            self.api.logger.warning('PicardWulf safe FLAC import: %s', type(exc).__name__)
+            _show('PicardWulf – Sicherer FLAC-Import',
+                  'Import konnte nicht gestartet werden; keine Erfolgsmeldung.', 'warning')
+
+
 class AutoApplyToggle(BaseAction):
     TITLE = 'Automatische Release-Auswahl ein-/ausschalten'
     MENU = ('PicardWulf',)
@@ -741,6 +754,7 @@ def enable(api):
     api.register_tools_menu_action(NativeReview)
     api.register_file_action(SelectedFileReview)
     api.register_file_action(NativeCollisionPreview)
+    api.register_file_action(SafeStagedFlacImport)
     api.register_tools_menu_action(AutoApplyToggle)
     api.register_tools_menu_action(AutoSaveToggle)
 
@@ -749,6 +763,8 @@ def disable():
     global _aggregator, _controller, _retiring_engine, _save_tracker, _gold_controller
     from .collision_preview import stop_collision_previews
     stop_collision_previews()
+    from .picard_safe_import import stop_safe_imports
+    stop_safe_imports()
     if _gold_controller is not None:
         _gold_controller.stop()
         _gold_controller = None
