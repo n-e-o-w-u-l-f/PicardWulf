@@ -86,12 +86,18 @@ def _target_lock(recovery_root, target):
             lock.write(b"PicardWulf staged import in progress\n")
             lock.flush()
             os.fsync(lock.fileno())
+            own_lock = os.fstat(lock.fileno())
     except FileExistsError:
         raise StagedImportRejected("Target import already locked; review stale lock manually") from None
     try:
         yield
     finally:
-        marker.unlink(missing_ok=True)
+        try:
+            current = marker.lstat()
+            if (current.st_dev, current.st_ino) == (own_lock.st_dev, own_lock.st_ino):
+                marker.unlink()
+        except FileNotFoundError:
+            pass
 
 
 def _valid_flac(path, inspect, decode):
@@ -106,6 +112,8 @@ def _valid_flac(path, inspect, decode):
         if not decode(path):
             raise StagedImportRejected("FLAC full-stream decoding failed")
         return details
+    except StagedImportRejected:
+        raise
     except (OSError, ValueError, ImportError, AttributeError, TypeError) as exc:
         raise StagedImportRejected("FLAC validation unavailable: " + type(exc).__name__) from exc
 
@@ -166,6 +174,8 @@ def import_staged_flac(source, destination, *,
         raise StagedImportRejected("Destination parent directory must already exist")
     if original.resolve() == target.resolve():
         raise StagedImportRejected("Source and destination cannot be the same")
+    if target.exists() and os.path.samefile(original, target):
+        raise StagedImportRejected("Source and destination refer to the same inode")
     _valid_flac(original, inspect, decode)
 
     with _target_lock(recovery, target) if apply else _null_lock():
