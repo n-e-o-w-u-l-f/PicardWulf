@@ -58,8 +58,8 @@ def capture_safe_import(file, settings, recovery_dir, tracker=None):
         raise SafeImportUnavailable("Picard destination is outside configured library root")
     if target == Path(source):
         raise SafeImportUnavailable("Source is already the target")
-    if not target.parent.is_dir():
-        raise SafeImportUnavailable("Create the album destination folder before import")
+    # The offline importer creates missing album/series subfolders only after
+    # explicit confirmation, then rolls back empty created folders on error.
     return {
         "source": str(Path(source)),
         "destination": str(target),
