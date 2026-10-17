@@ -202,6 +202,34 @@ def _original_file_snapshot(file):
     return _file_snapshot(file)
 
 
+def _retire_mp3_after_verified_flac(path):
+    """Worker-only: remove matching MP3 only after a verified FLAC save.
+
+    Keep an independently SHA-256-verified recovery copy outside the music
+    folder. Missing flac CLI or uncertain metadata means no deletion.
+    """
+    if not path:
+        return None
+    flac=Path(path)
+    if flac.suffix.casefold()!='.flac':
+        return None
+    mp3=flac.with_suffix('.mp3')
+    if not mp3.is_file():
+        return None
+    from .retention_policy import decide_mp3_removal, remove_verified_mp3
+    decision=decide_mp3_removal(mp3,flac)
+    if decision['action']!='REMOVE':
+        return decision
+    from .native_workflow import backup_envelope
+    from .save_tracking import verify_pre_save_identity
+    receipt=backup_envelope(str(mp3))
+    verify_pre_save_identity(receipt,str(mp3))
+    outcome=remove_verified_mp3(mp3,flac)
+    if outcome['action']=='REMOVED':
+        outcome['backup']=receipt['manifest']
+    return outcome
+
+
 def _file_saved(api, file):
     # Picard 3 invokes this ONLY after a file's save operation has completed.
     # Disk tag verification runs on PicardWulf's dedicated worker, not here.
@@ -629,6 +657,7 @@ def enable(api):
     api.register_album_metadata_processor(_album_guard, priority=-1000)
     api.plugin_config.register_option('auto_apply_best', True)
     api.plugin_config.register_option('auto_save_with_backup', False)
+    api.plugin_config.register_option('flac_only_cleanup', True)
     api.plugin_config.register_option('search_paused', False)
     api.plugin_config.register_option('sqlite_batch_size', 256)
     api.plugin_config.register_option('disabled_providers', [])
@@ -644,7 +673,8 @@ def enable(api):
         _aggregator = None
         api.logger.error('Universal aggregator initialization failed: %s', type(exc).__name__)
         return
-    _save_tracker=SaveTracker()
+    _save_tracker=SaveTracker(on_verified=(_retire_mp3_after_verified_flac if
+        api.plugin_config.get('flac_only_cleanup',True) else None))
     api.register_file_post_save_processor(_file_saved)
     try:
         _controller = AutoApplyController(api, _aggregator, _file_snapshot,
