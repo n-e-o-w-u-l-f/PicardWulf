@@ -198,6 +198,17 @@ class StagedImportTests(unittest.TestCase):
             self.assertFalse(album.parent.exists())
             self.assertEqual(list(back.iterdir()),[])
 
+    def test_incomplete_preview_does_not_authorize_create(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src,dst,backup,opts=self.fixture(tmp,existing=None)
+            preview=imp.import_staged_flac(src,dst,**opts)
+            preview.pop("destination_signature") # not interchangeable with None
+            with self.assertRaises(imp.StagedImportRejected):
+                imp.import_staged_flac(src,dst,apply=True,
+                                       expected_preview=preview,**opts)
+            self.assertFalse(dst.exists())
+            self.assertEqual(list(backup.iterdir()),[])
+
     def test_manipulated_expected_decision_cannot_be_applied(self):
         with tempfile.TemporaryDirectory() as tmp:
             src,dst,back,opt=self.fixture(tmp)
