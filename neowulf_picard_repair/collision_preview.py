@@ -19,8 +19,15 @@ def inspect_collision(source, target, *, native_overwrite=False, inspect=None):
         if (not original.is_file() or original.is_symlink()
                 or original.suffix.casefold() != ".flac"):
             return {"state": "REVIEW", "reason": "source_not_verified_flac"}
-        if (destination.is_symlink() or not destination.parent.is_dir()):
-            return {"state": "REVIEW", "reason": "target_directory_unavailable_or_link"}
+        if destination.is_symlink() or destination.parent.is_symlink():
+            return {"state": "REVIEW", "reason": "target_symlink"}
+        # Picard's native _rename() creates missing target directories.
+        # Their absence is not a collision; do not create them in preview.
+        ancestor = destination.parent
+        while not ancestor.exists() and ancestor != ancestor.parent:
+            ancestor = ancestor.parent
+        if not ancestor.is_dir() or ancestor.is_symlink():
+            return {"state": "REVIEW", "reason": "destination_ancestor_unsafe"}
         if (os.path.normcase(os.path.abspath(str(original)))
                 == os.path.normcase(os.path.abspath(str(destination)))):
             return {"state": "SAME_FILE", "reason": "native_target_is_source"}
