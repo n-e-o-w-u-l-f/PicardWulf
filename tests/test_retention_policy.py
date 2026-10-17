@@ -1,5 +1,6 @@
 """Synthetic, isolated tests: no real music, Picard process or cloud APIs."""
 import importlib.util
+import hashlib
 from pathlib import Path
 import tempfile
 import unittest
@@ -78,10 +79,24 @@ class RetentionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as t:
             mp3 = self.make(t, "track.mp3", 20)
             flac = self.make(t, "track.flac", 50)
-            result = policy.remove_verified_mp3(mp3, flac, inspect=inspect, decode=lambda _: True)
+            recovery = Path(t) / "recovery.copy"
+            recovery.write_bytes(mp3.read_bytes())
+            receipt = {"path": str(mp3), "backup": str(recovery),
+                       "sha256": hashlib.sha256(mp3.read_bytes()).hexdigest()}
+            result = policy.remove_verified_mp3(mp3, flac, backup_receipt=receipt,
+                                                inspect=inspect, decode=lambda _: True)
             self.assertEqual(result["action"], "REMOVED")
             self.assertFalse(mp3.exists())
             self.assertTrue(flac.exists())
+
+    def test_verified_pair_without_recovery_receipt_must_not_delete(self):
+        with tempfile.TemporaryDirectory() as t:
+            mp3 = self.make(t, "track.mp3", 20)
+            flac = self.make(t, "track.flac", 50)
+            with self.assertRaises(policy.RetentionRejected):
+                policy.remove_verified_mp3(mp3, flac, inspect=inspect,
+                                           decode=lambda _: True)
+            self.assertTrue(mp3.exists())
 
     def test_mp3_with_no_counterpart_is_retained(self):
         with tempfile.TemporaryDirectory() as t:
