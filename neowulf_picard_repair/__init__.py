@@ -154,6 +154,7 @@ def _album_guard(api, album, metadata, release_node):
 _aggregator = None
 _controller = None
 _save_tracker = None
+_gold_controller = None
 _retiring_engine = None
 
 
@@ -651,13 +652,14 @@ class AutoSaveToggle(BaseAction):
                   'Asynchrone Speichervorgänge und mögliche Umbenennungen in Picard prüfen.')
 
 def enable(api):
-    global _aggregator, _controller, _save_tracker
+    global _aggregator, _controller, _save_tracker, _gold_controller
     api.register_tools_menu_action(Inspect)
     api.register_tools_menu_action(Repair)
     api.register_album_metadata_processor(_album_guard, priority=-1000)
     api.plugin_config.register_option('auto_apply_best', True)
     api.plugin_config.register_option('auto_save_with_backup', False)
     api.plugin_config.register_option('flac_only_cleanup', True)
+    api.plugin_config.register_option('gold_auto_retire', True)
     api.plugin_config.register_option('search_paused', False)
     api.plugin_config.register_option('sqlite_batch_size', 256)
     api.plugin_config.register_option('disabled_providers', [])
@@ -689,6 +691,16 @@ def enable(api):
         api.logger.error('Automatic matching initialization failed: %s',type(exc).__name__)
     api.register_file_post_load_processor(_file_loaded)
     api.register_track_metadata_processor(_track_loaded, priority=-1000)
+    # Gold retirement is stricter than Picard's native complete-album option:
+    # actual FLAC tags are checked off-GUI before invoking UI-only removal.
+    # No auto-removal in headless/mock contexts without an actual Qt window.
+    if getattr(api.tagger, 'window', None) is not None and api.plugin_config.get('gold_auto_retire', True):
+        try:
+            from .gold_retirement import start_gold_retirement
+            _gold_controller = start_gold_retirement(api, _save_tracker)
+        except Exception as exc:
+            _gold_controller = None
+            api.logger.error('PicardWulf gold retirement not started: %s', type(exc).__name__)
     api.register_tools_menu_action(SourceStatus)
     api.register_tools_menu_action(ProviderPolicyAction)
     api.register_tools_menu_action(CredentialsAction)
@@ -706,7 +718,10 @@ def enable(api):
 
 
 def disable():
-    global _aggregator, _controller, _retiring_engine, _save_tracker
+    global _aggregator, _controller, _retiring_engine, _save_tracker, _gold_controller
+    if _gold_controller is not None:
+        _gold_controller.stop()
+        _gold_controller = None
     if _controller is not None:
         _controller.stop()
     _controller=None
