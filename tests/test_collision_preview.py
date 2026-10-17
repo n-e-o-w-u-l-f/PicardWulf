@@ -89,6 +89,25 @@ class CollisionPreviewTests(unittest.TestCase):
             dst.unlink()
             self.assertEqual(preview.inspect_collision(src,dst)['state'],'FREE_TARGET')
 
+    def test_picard_can_create_missing_destination_directory(self):
+        with tempfile.TemporaryDirectory() as temp:
+            src,dst=self.generate(temp)
+            target=Path(temp)/'Series'/'Volume 03'/'catalogue.flac'
+            self.assertFalse(target.parent.exists())
+            self.assertEqual(preview.inspect_collision(src,target)['state'],'FREE_TARGET')
+            self.assertFalse(target.parent.exists())
+
+    def test_existing_parent_symlink_is_not_silently_followed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            src,dst=self.generate(temp)
+            shortcut=Path(temp)/'dir-alias'
+            try:
+                shortcut.symlink_to(Path(temp),target_is_directory=True)
+            except OSError:
+                self.skipTest('Symlinks unavailable')
+            result=preview.inspect_collision(src,shortcut/'catalogue.flac',inspect=fake_audio)
+            self.assertEqual(result['state'],'REVIEW')
+
     def test_same_file_has_no_collision(self):
         with tempfile.TemporaryDirectory() as temp:
             src,_=self.generate(temp)
