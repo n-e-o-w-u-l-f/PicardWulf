@@ -676,6 +676,19 @@ class AutoSaveToggle(BaseAction):
             self.api.plugin_config['auto_save_with_backup']=False
             _show('PicardWulf', 'Automatisches Speichern: AUS. Auto-Auswahl bleibt aktiv.')
             return
+        from .retention_policy import require_native_tag_only, RetentionRejected
+        try:
+            require_native_tag_only(self.api.global_config.setting)
+        except RetentionRejected:
+            _show('PicardWulf – Automatisches Speichern gesperrt',
+                  'Picards natives Umbenennen oder Verschieben ist aktiv oder '
+                  'die Einstellungen sind nicht verifizierbar. '
+                  'Damit könnte File.save() die geprüfte FLAC-Kollisionsregel '
+                  'umgehen. Für reine Tag-Speicherung die Picard-Optionen '
+                  '"Dateien umbenennen" und "Dateien verschieben" deaktivieren; '
+                  'zur sicheren Bibliotheksübernahme die separate '
+                  'PicardWulf-FLAC-Importaktion verwenden.', 'warning')
+            return
         notice=('Automatisches SPEICHERN von Musikdateien aktivieren?\n\n'
                 'Nur der eindeutige höchstbewertete Release-Treffer wird ausgewählt. '
                 'Vor jedem Speichern wird die vollständige Original-Audiodatei '
