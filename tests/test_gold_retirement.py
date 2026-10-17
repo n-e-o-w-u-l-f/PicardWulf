@@ -148,6 +148,47 @@ class GoldTests(unittest.TestCase):
             file.orig_metadata["title"] = "Different"
             self.assertIsNone(gold.capture_gold(album, tagger, tracker))
 
+    def test_optional_release_id_change_blocks_gold(self):
+        with tempfile.TemporaryDirectory() as root:
+            _, file, album, tagger, tracker = self.prepared(root)
+            file.orig_metadata['musicbrainz_albumid'] = 'release-A'
+            file.metadata['musicbrainz_albumid'] = 'release-B'
+            self.assertIsNone(gold.capture_gold(album, tagger, tracker))
+
+    def test_optional_album_id_removed_blocks_gold(self):
+        with tempfile.TemporaryDirectory() as root:
+            _, file, album, tagger, tracker = self.prepared(root)
+            file.orig_metadata['musicbrainz_albumid'] = 'release-A'
+            self.assertIsNone(gold.capture_gold(album, tagger, tracker))
+
+    def test_multivalue_genre_secondary_mismatch_blocks_gold(self):
+        with tempfile.TemporaryDirectory() as root:
+            _, file, album, tagger, tracker = self.prepared(root)
+            file.orig_metadata['genre'] = ['Techno', 'Hardcore']
+            file.metadata['genre'] = ['Techno', 'Gabber']
+            self.assertIsNone(gold.capture_gold(album, tagger, tracker))
+
+    def test_disk_readback_all_multivalues_must_match(self):
+        with tempfile.TemporaryDirectory() as root:
+            _, file, album, tagger, tracker = self.prepared(root)
+            file.orig_metadata['genre'] = ['Techno', 'Hardcore']
+            file.metadata['genre'] = ['Techno', 'Hardcore']
+            snap = gold.capture_gold(album, tagger, tracker)
+            self.assertIsNotNone(snap)
+            module = types.ModuleType('mutagen')
+            flac_mod = types.ModuleType('mutagen.flac')
+            flac_mod.FLAC = FakeFlac
+            wrong = FakeFlac()
+            wrong.tags['genre'] = ['Techno', 'Gabber']
+            module.File = lambda *args, **kwargs: wrong
+            with patch.dict(sys.modules, {'mutagen': module, 'mutagen.flac': flac_mod}):
+                self.assertFalse(gold.verify_gold_files(snap))
+            right = FakeFlac()
+            right.tags['genre'] = ['Techno', 'Hardcore']
+            module.File = lambda *args, **kwargs: right
+            with patch.dict(sys.modules, {'mutagen': module, 'mutagen.flac': flac_mod}):
+                self.assertTrue(gold.verify_gold_files(snap))
+
     def test_disk_readback_accepts_matching_flac(self):
         with tempfile.TemporaryDirectory() as root:
             _, file, album, tagger, tracker = self.prepared(root)
