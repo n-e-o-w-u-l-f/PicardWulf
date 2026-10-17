@@ -91,8 +91,8 @@ class TestContract(unittest.TestCase):
         before=api.global_config.setting['file_renaming_scripts']['a']['script']
         with patch.object(plugin,'AutoApplyController'), patch.object(plugin,'UniversalAggregator'):
             plugin.enable(api)
-        self.assertEqual(len(api.registered),21)
-        self.assertEqual(len([x for x in api.registered if x[0]=='file_action']),2)
+        self.assertEqual(len(api.registered),22)
+        self.assertEqual(len([x for x in api.registered if x[0]=='file_action']),3)
         self.assertEqual(sum(x[0]=='file_saved_event' for x in api.registered),1)
         self.assertTrue(api.plugin_config['auto_apply_best'])
         self.assertFalse(api.plugin_config['auto_save_with_backup'])
