@@ -150,7 +150,7 @@ def _create_target_parents(library, target):
         raise
 
 
-def _install_new_exclusively(source, target, *, inspect, decode):
+def _install_new_exclusively(source, target, *, inspect, decode, expected_source_sha256=None):
     """No overwrite even under concurrent unrelated file creation.
 
     The same-directory hard link installs the fully fsynced stage atomically.
@@ -158,6 +158,8 @@ def _install_new_exclusively(source, target, *, inspect, decode):
     """
     start = _signature(source)
     digest = _digest(source)
+    if expected_source_sha256 is not None and digest != expected_source_sha256:
+        raise StagedImportRejected("Staging source changed after preview")
     temporary = None
     try:
         fd, filename = tempfile.mkstemp(
@@ -189,7 +191,8 @@ def _install_new_exclusively(source, target, *, inspect, decode):
 
 def import_staged_flac(source, destination, *,
                        staging_root, library_root, recovery_root,
-                       apply=False, inspect=inspect_audio, decode=_flac_decode_ok):
+                       apply=False, expected_preview=None,
+                       inspect=inspect_audio, decode=_flac_decode_ok):
     """Dry-run by default; apply must be explicitly True.
 
     REPLACED: canonical FLAC replaced with a verified larger incoming copy,
@@ -211,9 +214,13 @@ def import_staged_flac(source, destination, *,
     with _target_lock(recovery, target) if apply else _null_lock():
         created_folders = ()
         try:
-            if apply:
-                created_folders = _create_target_parents(library, target)
             target = _checked_path(target, library, must_exist=False)
+            # Evidence is captured inside the target lock and cannot be
+            # borrowed from the mutable Qt File object or a previous path.
+            source_signature = _signature(original)
+            source_sha256 = _digest(original)
+            target_signature = _signature(target) if target.exists() else None
+            target_sha256 = _digest(target) if target_signature is not None else None
             if target.exists():
                 _valid_flac(target, inspect, decode)
                 decision = decide_duplicate(target, original, inspect=inspect)
@@ -223,20 +230,42 @@ def import_staged_flac(source, destination, *,
                           else "SKIP")
             else:
                 action = "CREATE"
+            evidence = {
+                "action": "WOULD_" + action,
+                "source_path": str(original),
+                "destination_path": str(target),
+                "source_signature": source_signature,
+                "destination_signature": target_signature,
+                "source_sha256": source_sha256,
+                "destination_sha256": target_sha256,
+            }
             if not apply:
-                return {"action": "WOULD_" + action, "source_preserved": str(original)}
+                return dict(evidence, source_preserved=str(original))
+            if expected_preview is not None:
+                # A confirmed CREATE may not turn into a REPLACE/SKIP, nor
+                # may a different release/FLAC silently inherit confirmation.
+                if (not isinstance(expected_preview, dict)
+                        or any(expected_preview.get(k) != v for k, v in evidence.items())):
+                    raise StagedImportRejected(
+                        "Staging source, target or decision changed after confirmed preview")
+            # Avoid creating album/series directories before checking the
+            # complete preview snapshot and the user's approved decision.
+            created_folders = _create_target_parents(library, target)
             if action == "SKIP":
                 return {"action": "SKIPPED", "destination": str(target),
                         "source_preserved": str(original)}
             if action == "CREATE":
-                return _install_new_exclusively(original, target,
-                                                inspect=inspect, decode=decode)
+                return _install_new_exclusively(
+                    original, target, inspect=inspect, decode=decode,
+                    expected_source_sha256=source_sha256)
             # Full decoder validation belongs INSIDE the replacement
             # transaction so a failing post-commit stream restores the prior
             # canonical FLAC rather than merely leaving a backup behind.
             try:
-                result = replace_smaller_flac(target, original, recovery,
-                                              inspect=inspect, decode=decode)
+                result = replace_smaller_flac(
+                    target, original, recovery, inspect=inspect, decode=decode,
+                    expected_existing_sha256=target_sha256,
+                    expected_incoming_sha256=source_sha256)
             except RetentionRejected as exc:
                 # Give the calling Picard action one documented failure class
                 # while preserving the root cause and independent backup.
