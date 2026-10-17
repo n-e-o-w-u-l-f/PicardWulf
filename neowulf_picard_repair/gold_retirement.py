@@ -11,7 +11,19 @@ import time
 
 
 _FIELDS = ("artist", "title", "album", "tracknumber", "discnumber")
-_OPTIONAL = ("albumartist",)
+_OPTIONAL = ("albumartist", "musicbrainz_albumid", "musicbrainz_recordingid",
+             "isrc", "date", "originaldate", "barcode", "genre", "label")
+
+
+def native_gold_retirement_allowed(api):
+    """Disallow plugin UI retirement while Picard native auto-removal is enabled.
+
+    Do not silently change the owner\'s Picard.ini or active naming preset.
+    """
+    try:
+        return api.global_config.setting["remove_complete_albums_after_save"] is False
+    except (AttributeError, KeyError, TypeError, ValueError):
+        return False
 
 
 def _text(metadata, name):
@@ -134,7 +146,8 @@ def start_gold_retirement(api, tracker):
             self._closed = False
             self._pending = None
             self._failures = {}
-            self._scan_offset = 0
+            self._scan_iter = None
+            self._native_warned = False
             self.finished.connect(self._complete, Qt.ConnectionType.QueuedConnection)
             self._timer = QTimer(self)
             self._timer.setInterval(3000)
@@ -143,27 +156,38 @@ def start_gold_retirement(api, tracker):
             QTimer.singleShot(0, self.tick)
 
         def tick(self):
-            if self._closed or self._pending is not None or tracker.has_inflight():
+            if self._closed:
                 return
-            # Bounded round-robin over all albums, without disk I/O on Qt.
-            albums = tuple(api.tagger.albums.values())
-            if not albums:
-                self._scan_offset = 0
+            if not native_gold_retirement_allowed(api):
+                self._scan_iter = None
+                if not self._native_warned:
+                    api.logger.warning(
+                        "PicardWulf gold retirement inactive: Picard native "
+                        "remove_complete_albums_after_save must be explicitly OFF.")
+                    self._native_warned = True
                 return
-            count = len(albums)
-            start = self._scan_offset % count
-            budget = min(count, 100)
-            self._scan_offset = (start + budget) % count
-            for offset in range(budget):
-                index = (start + offset) % count
-                album = albums[index]
+            self._native_warned = False
+            if self._pending is not None or tracker.has_inflight():
+                return
+            # Never materialize all loaded albums on Qt. Album registry
+            # mutations invalidate a dict iterator; safely restart next tick.
+            if self._scan_iter is None:
+                self._scan_iter = iter(api.tagger.albums.values())
+            for _ in range(100):
+                try:
+                    album = next(self._scan_iter)
+                except StopIteration:
+                    self._scan_iter = None
+                    break
+                except RuntimeError:
+                    self._scan_iter = None
+                    return
                 snap = capture_gold(album, api.tagger, tracker)
                 if snap is None:
                     continue
                 failure = self._failures.get(snap[0])
                 if failure is not None and failure[0] == snap and time.monotonic() < failure[1]:
                     continue
-                self._scan_offset = (index + 1) % count
                 self._pending = (album, snap)
                 try:
                     future = self._pool.submit(verify_gold_files, snap)
@@ -195,7 +219,8 @@ def start_gold_retirement(api, tracker):
                 return
             # Re-check on the GUI thread after asynchronous readback. Never
             # interact with File or Album objects in the worker thread.
-            if tracker.has_inflight() or capture_gold(album, api.tagger, tracker) != snapshot:
+            if (not native_gold_retirement_allowed(api) or tracker.has_inflight()
+                    or capture_gold(album, api.tagger, tracker) != snapshot):
                 return
             try:
                 # Same Picard UI-removal entry point used by native 3.0 code.
@@ -206,6 +231,7 @@ def start_gold_retirement(api, tracker):
 
         def stop(self):
             self._closed = True
+            self._scan_iter = None
             self._timer.stop()
             self._pool.shutdown(wait=False, cancel_futures=True)
 
