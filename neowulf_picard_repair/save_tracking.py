@@ -198,7 +198,7 @@ def restore_backup_copy(backup, new_destination):
 class SaveTracker:
     """State machine; File/Qt objects stay on Picard callback thread."""
 
-    def __init__(self, max_pending=32, save_timeout=600):
+    def __init__(self, max_pending=32, save_timeout=600, on_verified=None):
         self._lock=threading.RLock()
         self._pending={}
         self._last=deque(maxlen=80)
@@ -208,6 +208,7 @@ class SaveTracker:
         self._restoring=0
         self.max_pending=max_pending
         self.save_timeout=save_timeout
+        self._on_verified=on_verified
 
     def register(self,file,backup,expected):
         check_backup_receipt(backup,getattr(file,'filename',None))
@@ -252,15 +253,28 @@ class SaveTracker:
                 self._last.append({'state':'UNVERIFIED','reason':'verification_worker_stopped',
                                    'backup':entry['backup']['backup']})
             return True
-        future.add_done_callback(lambda task,b=entry['backup']['backup']:self._completed(task,b))
+        future.add_done_callback(lambda task,b=entry['backup']['backup'],p=path:self._completed(task,b,p))
         return True
 
-    def _completed(self,future,backup):
+    def _completed(self,future,backup,path=None):
         try:result=future.result()
         except Exception as exc:result={'state':'UNVERIFIED','reason':type(exc).__name__}
         with self._lock:
             self._verifying-=1
             self._last.append(dict(result,backup=backup))
+        # Verification is already complete. Optional cleanup runs on the
+        # worker callback, never the Picard GUI or file-post-save thread.
+        if result.get('state')=='VERIFIED' and self._on_verified is not None:
+            try:
+                cleanup=self._on_verified(path)
+                if cleanup and cleanup.get('action') in ('REMOVED','REVIEW'):
+                    with self._lock:self._last.append(
+                        {'state':'MP3_'+cleanup['action'],
+                         'reason':cleanup.get('reason',''),
+                         'backup':cleanup.get('backup','')})
+            except Exception as exc:
+                with self._lock:self._last.append(
+                    {'state':'MP3_REVIEW','reason':type(exc).__name__})
 
     def request_restore(self, manifest, new_destination):
         """Non-blocking request after explicit operator confirmation in UI."""
