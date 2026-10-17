@@ -63,10 +63,8 @@ def qt_stub():
     class QObject:
         def __init__(self,*args):
             pass
-    class ConnectionType:
-        QueuedConnection=1
-    class Qt:
-        ConnectionType=ConnectionType
+    Qt=types.SimpleNamespace(
+        ConnectionType=types.SimpleNamespace(QueuedConnection=1))
     core.QObject=QObject
     core.QTimer=FakeTimer
     core.Qt=Qt
