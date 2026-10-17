@@ -2,6 +2,14 @@
 
 Updated: 2026-10-17 · Project: `n-e-o-w-u-l-f/PicardWulf`
 
+## 2026-10-17 · Staged FLAC actual arbitration (without native Picard hook)
+
+- **IMPLEMENTED SOURCE-ONLY** `neowulf_picard_repair/staged_flac_import.py`: offline `import_staged_flac` default `apply=False`, explicit `apply=True`; verified `WOULD_REPLACE/SKIP/CREATE` → `REPLACED/SKIPPED/CREATED`. Independent staging, library and recovery roots; full FLAC decoder; source retained; SHA-256 verified backup of replaced target; atomic replace/exclusive new target; fail-closed locks, invalid identity and symlink/inode conflicts. No MP3 or staging-source deletion.
+- Retention identity tightened for opposing `musicbrainz_albumid`, `musicbrainz_recordingid`, ISRC, barcode, date, albumartist and release status (including one-sided evidence); unequal editions now abstain from collision replacement and MP3 cleanup.
+- **TESTED:** 294 local Python regressions, `compileall`, `git diff --check` PASS on a fresh Legion source checkout `18387d6486730455db9d0af1b7588f7f903bc33b`. Includes disposable real FLAC stream generation and byte-comparison, plus stale lock and concurrent destination tests. Initial installer integrity test correctly caught missing new module and was repaired.
+- **EXTERNAL BLOCKER:** a separate standalone CLI entrypoint write to `scripts/picardwulf_staged_flac.py` was denied by a generic OpenAI security check; independent readback returned 404 (not published). Do not retry an equivalent write by altered payload/transport. Source importer and tests remain published.
+- **OPEN:** Native Picard save collision hook still cannot be vetoed using documented public API. The new importer is a separately callable source function, not registered for automatic use or BMAX deployed. Windows file locks/Hardlinks/Picard session and recovery have NOT been verified; installed Preset 3 and all original music remain untouched. PR #1 DRAFT. [Evidence and constraints](docs/planning/STAGED-FLAC-IMPORT-2026-10-17.md).
+
 ## 2026-10-17 · Picard 3 native filename-collision advisory
 
 - REQUEST CONTINUATION: automatic overwrite of smaller verified FLAC, skip existing larger/equal FLAC, FLAC-only, UI-only gold retirement. This checkpoint advances the **native destination-path discovery**, not the fully automatic collision rewrite.
