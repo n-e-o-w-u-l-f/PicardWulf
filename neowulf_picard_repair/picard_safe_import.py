@@ -153,7 +153,11 @@ def show_safe_import(api, selected_files, tracker=None):
                     close()
                     return
                 session["phase"] = "apply"
-                session["future"] = pool.submit(import_staged_flac, **params, apply=True)
+                # Bind this confirmation to the exact bytes and collision
+                # decision the user was shown, not merely to a filename.
+                session["future"] = pool.submit(
+                    import_staged_flac, **params, apply=True,
+                    expected_preview=outcome)
                 timer.start()
                 return
             QMessageBox.information(
