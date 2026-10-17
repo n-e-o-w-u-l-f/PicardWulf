@@ -1,7 +1,7 @@
 # PicardWulf / Picard 3: FLAC retention & completed-album removal
 
 Date: 2026-10-17 (Europe/Berlin)  
-Status: SOURCE-ONLY / TESTED-SYNTHETIC / BMAX RUNTIME NOT VERIFIED  
+Status: SOURCE-ONLY / SYNTHETIC + REAL GENERATED AUDIO TESTED ON LEGION / BMAX RUNTIME NOT VERIFIED  
 Target remains PicardWulf **v1.0**; no new release tag or Windows rollout.
 
 ## Request and acceptance
