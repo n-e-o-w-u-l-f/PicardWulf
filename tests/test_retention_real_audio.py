@@ -19,6 +19,11 @@ spec=importlib.util.spec_from_file_location(
     ROOT/'neowulf_picard_repair'/'retention_policy.py')
 policy=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(policy)
+gold_spec=importlib.util.spec_from_file_location(
+    'picardwulf_gold_real_audio',
+    ROOT/'neowulf_picard_repair'/'gold_retirement.py')
+gold=importlib.util.module_from_spec(gold_spec)
+gold_spec.loader.exec_module(gold)
 
 
 class RealAudioRetentionTests(unittest.TestCase):
@@ -54,6 +59,10 @@ class RealAudioRetentionTests(unittest.TestCase):
             tags=EasyID3(str(mp3))
             for key,value in fields.items():tags[key]=value
             tags.save()
+            gold_snapshot=('synthetic-album',((str(flac),tuple(fields.items())),))
+            self.assertTrue(gold.verify_gold_files(gold_snapshot))
+            wrong_snapshot=('synthetic-album',((str(flac),(('title','Not the stored title'),)),))
+            self.assertFalse(gold.verify_gold_files(wrong_snapshot))
             self.assertEqual(policy.decide_mp3_removal(mp3,flac)['action'],'REMOVE')
             backup=root/'backup.mp3'
             shutil.copy2(mp3,backup)
