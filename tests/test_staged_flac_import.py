@@ -91,6 +91,29 @@ class StagedImportTests(unittest.TestCase):
             self.assertTrue(src.exists())
             self.assertEqual(list(back.iterdir()),[])
 
+    def test_missing_nested_album_and_series_folder_created_only_on_apply(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src,dst,back,opt=self.fixture(tmp,existing=None)
+            target=Path(opt["library_root"])/"Various Artists"/"Bravo Hits"/"Volume 03"/"Track.flac"
+            self.assertEqual(imp.import_staged_flac(src,target,**opt)["action"],"WOULD_CREATE")
+            self.assertFalse(target.parent.exists())
+            result=imp.import_staged_flac(src,target,apply=True,**opt)
+            self.assertEqual(result["action"],"CREATED")
+            self.assertEqual(target.read_bytes(),src.read_bytes())
+            self.assertTrue(src.is_file())
+
+    def test_failed_create_removes_only_new_empty_folders(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src,dst,back,opt=self.fixture(tmp,existing=None)
+            target=Path(opt["library_root"])/"Artist"/"Album"/"Track.flac"
+            with patch.object(imp.os,"link",side_effect=OSError("Not supported")):
+                with self.assertRaises(imp.StagedImportRejected):
+                    imp.import_staged_flac(src,target,apply=True,**opt)
+            self.assertFalse(target.parent.exists())
+            self.assertFalse((Path(opt["library_root"])/"Artist").exists())
+            self.assertTrue(Path(opt["library_root"]).is_dir())
+            self.assertTrue(src.is_file())
+
     def test_conflicting_identity_is_review_no_write(self):
         with tempfile.TemporaryDirectory() as tmp:
             src,dst,back,opt=self.fixture(tmp,incoming=40,existing=20)
