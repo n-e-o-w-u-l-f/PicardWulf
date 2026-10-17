@@ -2,6 +2,16 @@
 
 Updated: 2026-10-14 · Project: `n-e-o-w-u-l-f/PicardWulf`
 
+## 2026-10-17 · Picard 3 / retention policy source checkpoint
+
+- USER GOAL: larger validated FLAC wins duplicate conflict; existing equal/larger wins otherwise; remove only verified redundant MP3; remove finished gold albums only from Picard UI.
+- STATUS: **PARTIAL / SOURCE-ONLY**, on feature branch `feature/picard3-retention-policy-20261017`. No Picard runtime or actual music was modified.
+- Added `retention_policy.py` + eight synthetic tests. Scoped, SHA-256-backup-preserving duplicate-replacement primitive exists but **is not connected to Picard's actual destination collision path**.
+- Added PicardWulf-specific post-save callback that runs only after verified tag readback; same-stem verified FLAC/MP3 comparison, full FLAC decoder requirement and independent MP3 backup precede potential unlink. Missing/invalid evidence aborts without deletion. On BMAX this is **not deployed** and `flac` binary availability is not known.
+- Fixed discovered installer inventory regression; fresh Legion clone test suite **238 tests PASS** plus `compileall` PASS at `f4289fffc151f026f25682f6d51a3ac19f89ff22`. Following documentation commit has no code changes.
+- Picard 3 native General setting `remove_complete_albums_after_save` is documented; **not yet enabled/tested on BMAX**, and its native complete/saved check is not independent PicardWulf zero-discrepancy verification.
+- Acceptance gates and missing runtime evidence: [Picard 3 retention plan](docs/planning/PICARD3-RETENTION-GATES-2026-10-17.md). NEXT: implement collision interception + strict UI gold cleanup; then disposable real-file BMAX tests, review, merge and deployment. Target version remains **v1.0**.
+
 ## Fixed target version
 
 - **TARGET_VERSION: v1.0** (no interim v1.0.1 / 1.0.0 version designation for source milestones).
