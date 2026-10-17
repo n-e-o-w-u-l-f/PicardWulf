@@ -118,6 +118,38 @@ def _valid_flac(path, inspect, decode):
         raise StagedImportRejected("FLAC validation unavailable: " + type(exc).__name__) from exc
 
 
+def _create_target_parents(library, target):
+    """Create missing subdirectories only below verified library root.
+
+    On failure clean up only directories created by this call, if still empty.
+    Never remove an existing parent or follow a known symlink/junction.
+    """
+    created = []
+    current = Path(library)
+    try:
+        for part in target.relative_to(library).parts[:-1]:
+            current = current / part
+            _checked_path(current / "future.flac", library, must_exist=False)
+            if not current.exists():
+                try:
+                    current.mkdir()
+                except FileExistsError:
+                    pass
+                else:
+                    created.append(current)
+            if (not current.is_dir() or current.is_symlink()
+                    or not _within(current.resolve(strict=True), library.resolve(strict=True))):
+                raise StagedImportRejected("Destination directory unsafe or redirected")
+        return tuple(created)
+    except Exception:
+        for directory in reversed(created):
+            try:
+                directory.rmdir()
+            except OSError:
+                pass
+        raise
+
+
 def _install_new_exclusively(source, target, *, inspect, decode):
     """No overwrite even under concurrent unrelated file creation.
 
@@ -170,8 +202,6 @@ def import_staged_flac(source, destination, *,
     staging, library, recovery = _roots(staging_root, library_root, recovery_root)
     original = _checked_path(source, staging, must_exist=True)
     target = _checked_path(destination, library, must_exist=False)
-    if not target.parent.is_dir() or target.parent.is_symlink():
-        raise StagedImportRejected("Destination parent directory must already exist")
     if original.resolve() == target.resolve():
         raise StagedImportRejected("Source and destination cannot be the same")
     if target.exists() and os.path.samefile(original, target):
@@ -179,32 +209,43 @@ def import_staged_flac(source, destination, *,
     _valid_flac(original, inspect, decode)
 
     with _target_lock(recovery, target) if apply else _null_lock():
-        target = _checked_path(target, library, must_exist=False)
-        if target.exists():
-            _valid_flac(target, inspect, decode)
-            decision = decide_duplicate(target, original, inspect=inspect)
-            if decision["action"] == "REVIEW":
-                return {"action": "REVIEW", "reason": decision["reason"]}
-            action = ("REPLACE" if decision["action"] == "REPLACE"
-                      else "SKIP")
-        else:
-            action = "CREATE"
-        if not apply:
-            return {"action": "WOULD_" + action, "source_preserved": str(original)}
-        if action == "SKIP":
-            return {"action": "SKIPPED", "destination": str(target),
-                    "source_preserved": str(original)}
-        if action == "CREATE":
-            return _install_new_exclusively(original, target,
-                                            inspect=inspect, decode=decode)
-        result = replace_smaller_flac(target, original, recovery, inspect=inspect)
-        if result.get("action") != "REPLACED":
-            raise StagedImportRejected("Collision changed before replacement")
-        if not decode(target):
-            raise StagedImportRejected(
-                "Replacement FLAC decode failed; recovery backup retained")
-        return dict(result, source_preserved=str(original))
+        created_folders = ()
+        try:
+            if apply:
+                created_folders = _create_target_parents(library, target)
+            target = _checked_path(target, library, must_exist=False)
+            if target.exists():
+                _valid_flac(target, inspect, decode)
+                decision = decide_duplicate(target, original, inspect=inspect)
+                if decision["action"] == "REVIEW":
+                    return {"action": "REVIEW", "reason": decision["reason"]}
+                action = ("REPLACE" if decision["action"] == "REPLACE"
+                          else "SKIP")
+            else:
+                action = "CREATE"
+            if not apply:
+                return {"action": "WOULD_" + action, "source_preserved": str(original)}
+            if action == "SKIP":
+                return {"action": "SKIPPED", "destination": str(target),
+                        "source_preserved": str(original)}
+            if action == "CREATE":
+                return _install_new_exclusively(original, target,
+                                                inspect=inspect, decode=decode)
+            result = replace_smaller_flac(target, original, recovery, inspect=inspect)
+            if result.get("action") != "REPLACED":
+                raise StagedImportRejected("Collision changed before replacement")
+            if not decode(target):
+                raise StagedImportRejected(
+                    "Replacement FLAC decode failed; recovery backup retained")
+            return dict(result, source_preserved=str(original))
 
+        except Exception:
+            for directory in reversed(created_folders):
+                try:
+                    directory.rmdir()
+                except OSError:
+                    pass
+            raise
 
 @contextmanager
 def _null_lock():
