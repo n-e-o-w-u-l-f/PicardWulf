@@ -163,7 +163,10 @@ def require_native_tag_only(settings):
     return True
 
 
-def replace_smaller_flac(existing, incoming, backup_dir, *, inspect=inspect_audio, decode=None):
+def replace_smaller_flac(existing, incoming, backup_dir, *,
+                         inspect=inspect_audio, decode=None,
+                         expected_existing_sha256=None,
+                         expected_incoming_sha256=None):
     """Atomic replacement, independent retained backup, rechecked bytes/identity.
 
     Only for files already mapped by Picard to the same *verified* recording.
@@ -176,6 +179,13 @@ def replace_smaller_flac(existing, incoming, backup_dir, *, inspect=inspect_audi
     before_old, before_new = _signature(old), _signature(new)
     original_digest = _digest(old)
     incoming_digest = _digest(new)
+    # Reject changes between the Picard GUI's reviewed dry-run and the
+    # actual replacement; never apply a confirmation to different bytes.
+    if ((expected_existing_sha256 is not None
+         and original_digest != expected_existing_sha256)
+        or (expected_incoming_sha256 is not None
+            and incoming_digest != expected_incoming_sha256)):
+        raise RetentionRejected("Canonical FLAC or source changed after preview")
     if old.is_symlink() or new.is_symlink():
         raise RetentionRejected("Symbolic link not permitted")
     root.mkdir(parents=True, exist_ok=True)
