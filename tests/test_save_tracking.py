@@ -29,6 +29,10 @@ def wait_state(tracker, desired, deadline=5):
         time.sleep(.01)
     raise AssertionError((desired,tracker.status()))
 
+def wait_state_after_post_save(tracker, file, desired):
+    tracker.post_save(file)
+    return wait_state(tracker, desired)
+
 class FakeFile:
     def __init__(self,path):
         self.filename=str(path)
@@ -258,6 +262,38 @@ class SaveTrackingTests(unittest.TestCase):
                 tr.request_restore(rec['manifest'],str(src))
                 self.assertEqual(wait_state(tr,'RESTORE_REJECTED')['state'],'RESTORE_REJECTED')
                 self.assertEqual(src.read_bytes(),before)
+            finally:tr.close()
+
+    def test_retention_callback_runs_only_after_verified_save(self):
+        with tempfile.TemporaryDirectory() as directory:
+            src,rec=self.receipt(directory)
+            f=FakeFile(src)
+            called=[]
+            mock=types.ModuleType('mutagen')
+            mock.File=lambda *a,**k:FakeAudio({'title':['Verified']})
+            tr=tracking.SaveTracker(on_verified=lambda p:(called.append(p) or
+                    {'action':'REMOVED','reason':'test_only','backup':'test.manifest'}))
+            try:
+                tr.register(f,rec,{'title':'Verified'})
+                with patch.dict(sys.modules,{'mutagen':mock}):
+                    tr.post_save(f)
+                    self.assertEqual(wait_state(tr,'MP3_REMOVED')['reason'],'test_only')
+                self.assertEqual(called,[str(src)])
+            finally:tr.close()
+
+    def test_retention_callback_not_called_after_tag_mismatch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            src,rec=self.receipt(directory)
+            f=FakeFile(src)
+            called=[]
+            mock=types.ModuleType('mutagen')
+            mock.File=lambda *a,**k:FakeAudio({'title':['Wrong']})
+            tr=tracking.SaveTracker(on_verified=lambda p:called.append(p))
+            try:
+                tr.register(f,rec,{'title':'Expected'})
+                with patch.dict(sys.modules,{'mutagen':mock}):
+                    self.assertEqual(wait_state_after_post_save(tr,f,'MISMATCH')['state'],'MISMATCH')
+                self.assertEqual(called,[])
             finally:tr.close()
 
     def test_post_save_renamed_target_is_read_from_actual_picard_filename(self):
