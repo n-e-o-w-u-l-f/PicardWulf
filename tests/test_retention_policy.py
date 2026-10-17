@@ -54,6 +54,66 @@ class RetentionTests(unittest.TestCase):
             self.assertEqual(Path(result["backup"]).read_bytes(), b"A" * 20)
             self.assertEqual(new.stat().st_size, 90)
 
+    def test_post_commit_corruption_triggers_actual_rollback(self):
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t)
+            library=root/"library"; library.mkdir()
+            recovery=root/"recovery"; recovery.mkdir()
+            old=self.make(library,"existing.flac",20)
+            new=self.make(library,"incoming.flac",90)
+            old_bytes=old.read_bytes()
+            replace_real=policy.os.replace
+            calls=[]
+            def corrupt_first_commit(source,destination):
+                replace_real(source,destination)
+                calls.append((str(source),str(destination)))
+                if len(calls)==1:
+                    Path(destination).write_bytes(b"CORRUPT_AFTER_COMMIT")
+            with unittest.mock.patch.object(policy.os,"replace",side_effect=corrupt_first_commit):
+                with self.assertRaises(policy.RetentionRejected) as err:
+                    policy.replace_smaller_flac(old,new,recovery,inspect=inspect)
+            self.assertIn("original restored",str(err.exception))
+            self.assertEqual(old.read_bytes(),old_bytes)
+            self.assertEqual(new.read_bytes(),b"A"*90)
+            backups=[p for p in recovery.iterdir() if p.is_file()]
+            self.assertEqual(len(backups),1)
+            self.assertEqual(backups[0].read_bytes(),old_bytes)
+            self.assertEqual(len(calls),2)
+            self.assertFalse(any(p.name.startswith(".picardwulf-") for p in library.iterdir()))
+
+    def test_failed_rollback_never_claims_success_and_keeps_backup(self):
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t)
+            library=root/"library"; library.mkdir()
+            recovery=root/"recovery"; recovery.mkdir()
+            old=self.make(library,"existing.flac",20)
+            new=self.make(library,"incoming.flac",90)
+            old_bytes=old.read_bytes()
+            replace_real=policy.os.replace
+            count=[0]
+            def fail_restore(source,destination):
+                count[0]+=1
+                if count[0]==2:
+                    raise OSError("restore unavailable")
+                replace_real(source,destination)
+                Path(destination).write_bytes(b"CORRUPT_AFTER_COMMIT")
+            with unittest.mock.patch.object(policy.os,"replace",side_effect=fail_restore):
+                with self.assertRaises(policy.RetentionRejected) as err:
+                    policy.replace_smaller_flac(old,new,recovery,inspect=inspect)
+            self.assertIn("rollback unverified",str(err.exception))
+            backups=[p for p in recovery.iterdir() if p.is_file()]
+            self.assertEqual(len(backups),1)
+            self.assertEqual(backups[0].read_bytes(),old_bytes)
+
+    def test_tag_only_guard_blocks_move_and_rename(self):
+        good={'rename_files':False,'move_files':False}
+        self.assertTrue(policy.require_native_tag_only(good))
+        for options in ({'rename_files':True,'move_files':False},
+                        {'rename_files':False,'move_files':True},
+                        {'rename_files':False},{}):
+            with self.assertRaises(policy.RetentionRejected):
+                policy.require_native_tag_only(options)
+
     def test_refuse_mismatched_track(self):
         with tempfile.TemporaryDirectory() as t:
             old = self.make(t, "existing.flac", 20)
