@@ -224,7 +224,7 @@ def _retire_mp3_after_verified_flac(path):
     from .save_tracking import verify_pre_save_identity
     receipt=backup_envelope(str(mp3))
     verify_pre_save_identity(receipt,str(mp3))
-    outcome=remove_verified_mp3(mp3,flac)
+    outcome=remove_verified_mp3(mp3,flac,backup_receipt=receipt)
     if outcome['action']=='REMOVED':
         outcome['backup']=receipt['manifest']
     return outcome
