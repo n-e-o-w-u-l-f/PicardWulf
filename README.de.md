@@ -64,6 +64,12 @@ Siehe [Anbieterzugänge, Freigabegrenzen und sicherer BMAX-Rollout](docs/plannin
 
 Die Zielversion bleibt **v1.0**. Die geprüften Risiken und die vor der Freigabe notwendigen Arbeiten sind im [technischen Forschungsbericht](docs/research/PICARDWULF-V1.0-DEEP-RESEARCH-2026-10-14.md) und im [verbindlichen Ausführungsplan](docs/planning/V1.0-NEXT-EXECUTION.md) festgehalten. Zuerst wird die SQLite-Warteschlange vollständig entkoppelt und dauerhaft abgesichert. Diese Recherche hat den laufenden BMAX-Picard nicht verändert.
 
+## Picard 3 – Größenregel und Dateikollisionen (Entwicklung)
+
+Im Kontextmenü ausgewählter Dateien steht im Entwicklungsbranch die **„PicardWulf: Dateikollisionen / FLAC-Größenregel prüfen (nur lesen)“**-Aktion bereit. Die Vorschau ermittelt den vorgesehenen Zielnamen aus den **tatsächlich aktiven Picard-Dateibenennungsoptionen (einschließlich Preset 3)** und vergleicht vorhandene mit eingehenden FLAC-Dateien anhand echter Metadaten, Laufzeit und Größe. Die Prüfung läuft im Hintergrund und verändert **keine** Musikdateien.
+
+**Die Größenentscheidung ist derzeit nur eine Vorschau, keine automatische Dateiersetzung.** Picards interne Umbenennungsfunktion lässt sich über den dokumentierten Plugin-Hook vor dem Speichern nicht zuverlässig stoppen. Bei aktivierter Picard-Option **„Vorhandene Dateien beim Verschieben überschreiben“** kann Picard eigenständig Dateien überschreiben, auch wenn die PicardWulf-Größenregel zum Behalten geraten hätte. Diese Option deshalb vor einem praktischen Test deaktivieren. Die BMAX-Live-Abnahme und Integration einer belastbaren automatischen Kollisionsbehandlung bleiben offen; weder Installation noch Freigabe des Entwicklungsbranches sind damit erfolgt.
+
 ## Sicherheit und Grenzen
 
 MusicBrainz, Deezer und iTunes können ohne zusätzliche Zugangsdaten abgefragt werden, sofern ihre öffentlichen Dienste erreichbar sind. Spotify, SoundCloud und Last.fm benötigen legitime Zugangsdaten. Es findet **keine Umgehung von API-Limits** statt. Suchbegriffe werden an aktivierte Metadatenanbieter übertragen.
