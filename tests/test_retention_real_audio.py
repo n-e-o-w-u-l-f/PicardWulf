@@ -89,5 +89,66 @@ class RealAudioRetentionTests(unittest.TestCase):
             self.assertEqual(Path(receipt['backup']).read_bytes(),original)
 
 
+
+    def test_staged_import_with_real_flac_stream_and_rollback(self):
+        if not shutil.which('flac'):
+            self.skipTest('Real encoded FLAC test requires flac CLI')
+        try:
+            from mutagen.flac import FLAC
+        except ImportError:
+            self.skipTest('Mutagen not installed')
+        import importlib
+        import sys
+        import types
+        name='picardwulf_real_staged_import'
+        pkg=types.ModuleType(name)
+        pkg.__path__=[str(ROOT/'neowulf_picard_repair')]
+        sys.modules[name]=pkg
+        importer=importlib.import_module(name+'.staged_flac_import')
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            staging=root/'staging'
+            library=root/'library'
+            backup=root/'recovery'
+            for path in (staging,library,backup):
+                path.mkdir()
+            wav=root/'tiny.wav'
+            with wave.open(str(wav),'wb') as audio:
+                audio.setnchannels(1)
+                audio.setsampwidth(2)
+                audio.setframerate(22050)
+                audio.writeframes(b'\\x00\\x00'*22050)
+            incoming=staging/'Synthetic.flac'
+            canonical=library/'Synthetic.flac'
+            subprocess.run(['flac','--silent','-f','-o',str(incoming),str(wav)],
+                           check=True,capture_output=True)
+            fields={'artist':'Synthetic Artist','title':'Track',
+                    'album':'Release','discnumber':'1','tracknumber':'1'}
+            tag=FLAC(str(incoming))
+            for field,value in fields.items():
+                tag[field]=value
+            tag.save()
+            shutil.copy2(incoming,canonical)
+            bigger=FLAC(str(incoming))
+            bigger['comment']='Larger file generated with metadata '+('Q'*65536)
+            bigger.save()
+            self.assertGreater(incoming.stat().st_size,canonical.stat().st_size)
+            opts={'staging_root':staging,'library_root':library,'recovery_root':backup}
+            self.assertEqual(importer.import_staged_flac(incoming,canonical,**opts)
+                             ['action'],'WOULD_REPLACE')
+            original=canonical.read_bytes()
+            result=importer.import_staged_flac(incoming,canonical,apply=True,**opts)
+            self.assertEqual(result['action'],'REPLACED')
+            self.assertEqual(canonical.read_bytes(),incoming.read_bytes())
+            self.assertEqual(Path(result['backup']).read_bytes(),original)
+            self.assertTrue(incoming.exists())
+            self.assertEqual(importer.import_staged_flac(incoming,canonical,apply=True,**opts)
+                             ['action'],'SKIPPED')
+            other=library/'New Track.flac'
+            created=importer.import_staged_flac(incoming,other,apply=True,**opts)
+            self.assertEqual(created['action'],'CREATED')
+            self.assertEqual(other.read_bytes(),incoming.read_bytes())
+            self.assertTrue(incoming.exists())
+
 if __name__=='__main__':
     unittest.main()
