@@ -245,7 +245,8 @@ def import_staged_flac(source, destination, *,
                 # A confirmed CREATE may not turn into a REPLACE/SKIP, nor
                 # may a different release/FLAC silently inherit confirmation.
                 if (not isinstance(expected_preview, dict)
-                        or any(expected_preview.get(k) != v for k, v in evidence.items())):
+                        or any(k not in expected_preview or expected_preview[k] != v
+                               for k, v in evidence.items())):
                     raise StagedImportRejected(
                         "Staging source, target or decision changed after confirmed preview")
             # Avoid creating album/series directories before checking the
