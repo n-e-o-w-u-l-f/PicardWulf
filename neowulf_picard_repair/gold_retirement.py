@@ -134,6 +134,7 @@ def start_gold_retirement(api, tracker):
             self._closed = False
             self._pending = None
             self._failures = {}
+            self._scan_offset = 0
             self.finished.connect(self._complete, Qt.ConnectionType.QueuedConnection)
             self._timer = QTimer(self)
             self._timer.setInterval(3000)
@@ -144,13 +145,25 @@ def start_gold_retirement(api, tracker):
         def tick(self):
             if self._closed or self._pending is not None or tracker.has_inflight():
                 return
-            # Do not scan the filesystem from the Qt event loop.
-            for album in tuple(api.tagger.albums.values())[:500]:
+            # Bounded round-robin over all albums, without disk I/O on Qt.
+            albums = tuple(api.tagger.albums.values())
+            if not albums:
+                self._scan_offset = 0
+                return
+            count = len(albums)
+            start = self._scan_offset % count
+            budget = min(count, 100)
+            self._scan_offset = (start + budget) % count
+            for offset in range(budget):
+                index = (start + offset) % count
+                album = albums[index]
                 snap = capture_gold(album, api.tagger, tracker)
                 if snap is None:
                     continue
-                if self._failures.get(snap[0]) == snap:
+                failure = self._failures.get(snap[0])
+                if failure is not None and failure[0] == snap and time.monotonic() < failure[1]:
                     continue
+                self._scan_offset = (index + 1) % count
                 self._pending = (album, snap)
                 try:
                     future = self._pool.submit(verify_gold_files, snap)
@@ -176,7 +189,9 @@ def start_gold_retirement(api, tracker):
                 return
             album, snapshot = pending
             if not valid:
-                self._failures[snapshot[0]] = snapshot
+                self._failures[snapshot[0]] = (snapshot, time.monotonic() + 60)
+                if len(self._failures) > 2048:
+                    self._failures.pop(next(iter(self._failures)))
                 return
             # Re-check on the GUI thread after asynchronous readback. Never
             # interact with File or Album objects in the worker thread.
