@@ -173,6 +173,20 @@ class CollisionPreviewTests(unittest.TestCase):
             self.assertEqual(rows,((str(src),str(src),False),))
             self.assertEqual(f.calls,[])
 
+    def test_lazy_selection_consumes_only_bounded_amount(self):
+        with tempfile.TemporaryDirectory() as temp:
+            src,dst=self.generate(temp)
+            settings={'rename_files':True,'move_files':True,
+                      'move_overwrite_existing_files':False}
+            count=[0]
+            def iterator():
+                for _ in range(100000):
+                    count[0]+=1
+                    yield NativePicardFile(src,dst)
+            rows=preview.capture_native_targets(iterator(),settings,limit=3)
+            self.assertEqual(len(rows),3)
+            self.assertEqual(count[0],3)
+
     def test_missing_settings_fail_closed(self):
         with tempfile.TemporaryDirectory() as temp:
             src,dst=self.generate(temp)
