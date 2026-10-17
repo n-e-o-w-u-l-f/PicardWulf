@@ -142,6 +142,27 @@ def decide_mp3_removal(mp3_path, flac_path, *, inspect=inspect_audio, decode=_fl
     return {"action": "REMOVE", "reason": "verified_flac_counterpart"}
 
 
+def require_native_tag_only(settings):
+    """Fail closed before PicardWulf-initiated native File.save().
+
+    Picard 3 saves tags and then performs its private native _rename(), which
+    cannot be vetoed from a public file-pre-save plugin processor. Avoid any
+    automated native rename/move until collision arbitration can be integrated
+    with Picard's supported lifecycle. Normal Picard Ctrl+S remains outside
+    this plugin guard.
+    """
+    try:
+        if settings["rename_files"] is not False or settings["move_files"] is not False:
+            raise RetentionRejected(
+                "PicardWulf save requires tag-only Picard options: "
+                "disable native rename/move for this operation; use verified "
+                "staging import for destination transfers.")
+    except (KeyError, TypeError, AttributeError) as exc:
+        raise RetentionRejected(
+            "Picard active rename/move settings unavailable; refusing save") from exc
+    return True
+
+
 def replace_smaller_flac(existing, incoming, backup_dir, *, inspect=inspect_audio):
     """Atomic replacement, independent retained backup, rechecked bytes/identity.
 
@@ -153,6 +174,8 @@ def replace_smaller_flac(existing, incoming, backup_dir, *, inspect=inspect_audi
     if decision["action"] != "REPLACE":
         return decision
     before_old, before_new = _signature(old), _signature(new)
+    original_digest = _digest(old)
+    incoming_digest = _digest(new)
     if old.is_symlink() or new.is_symlink():
         raise RetentionRejected("Symbolic link not permitted")
     root.mkdir(parents=True, exist_ok=True)
@@ -165,7 +188,8 @@ def replace_smaller_flac(existing, incoming, backup_dir, *, inspect=inspect_audi
             shutil.copyfileobj(src, dst, length=1024 * 1024)
             dst.flush()
             os.fsync(dst.fileno())
-        if _digest(old) != _digest(backup):
+        if (_digest(backup) != original_digest or
+                _digest(old) != original_digest):
             raise RetentionRejected("Existing-file backup mismatch")
         fd, name = tempfile.mkstemp(prefix=".picardwulf-", suffix=".flac",
                                    dir=str(old.parent))
@@ -174,7 +198,8 @@ def replace_smaller_flac(existing, incoming, backup_dir, *, inspect=inspect_audi
             shutil.copyfileobj(src, dst, length=1024 * 1024)
             dst.flush()
             os.fsync(dst.fileno())
-        if _digest(new) != _digest(stage):
+        if (_digest(stage) != incoming_digest or
+                _digest(new) != incoming_digest):
             raise RetentionRejected("Incoming file copy mismatch")
         if _signature(old) != before_old or _signature(new) != before_new:
             raise RetentionRejected("Audio changed during replacement")
@@ -182,8 +207,42 @@ def replace_smaller_flac(existing, incoming, backup_dir, *, inspect=inspect_audi
             raise RetentionRejected("Staged file identity mismatch")
         os.replace(stage, old)
         stage = None
-        if _digest(old) != _digest(new):
-            raise RetentionRejected("Post-replacement content mismatch; restore from backup")
+        try:
+            committed = (_digest(old) == incoming_digest
+                         and _digest(new) == incoming_digest)
+        except (OSError, ValueError):
+            committed = False
+        if not committed:
+            # After native os.replace the former destination no longer exists
+            # at its path. A backup receipt alone is not rollback. Materialize
+            # the verified backup beside the destination, then atomically
+            # restore it. Never consume/rename/delete the recovery copy.
+            restore = None
+            try:
+                fd, restore_name = tempfile.mkstemp(
+                    prefix=".picardwulf-restore-", suffix=".flac",
+                    dir=str(old.parent))
+                restore = Path(restore_name)
+                with os.fdopen(fd, "wb") as out, backup.open("rb") as src:
+                    shutil.copyfileobj(src, out, length=1024 * 1024)
+                    out.flush()
+                    os.fsync(out.fileno())
+                if (_digest(backup) != original_digest
+                        or _digest(restore) != original_digest):
+                    raise RetentionRejected("Rollback source hash mismatch")
+                os.replace(restore, old)
+                restore = None
+                if _digest(old) != original_digest:
+                    raise RetentionRejected("Rollback destination hash mismatch")
+            except Exception as error:
+                raise RetentionRejected(
+                    "Replacement integrity failed; automatic rollback unverified; "
+                    "independent backup preserved") from error
+            finally:
+                if restore is not None:
+                    restore.unlink(missing_ok=True)
+            raise RetentionRejected(
+                "Replacement integrity failed; original restored from backup")
         return {"action": "REPLACED", "backup": str(backup), "destination": str(old)}
     finally:
         if stage is not None:
