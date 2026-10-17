@@ -607,6 +607,20 @@ class SelectedFileReview(BaseAction):
 
 
 
+class NativeCollisionPreview(BaseAction):
+    TITLE = 'PicardWulf: Dateikollisionen / FLAC-Größenregel prüfen (nur lesen)'
+
+    def callback(self, objs):
+        try:
+            from .collision_preview import show_collision_preview
+            show_collision_preview(self.api, objs)
+        except Exception as exc:
+            self.api.logger.warning('PicardWulf native collision preview failed: %s',
+                                    type(exc).__name__)
+            _show('PicardWulf – Dateikollisionen',
+                  'Kollisionsprüfung nicht verfügbar; keine Dateien verändert.', 'warning')
+
+
 class AutoApplyToggle(BaseAction):
     TITLE = 'Automatische Release-Auswahl ein-/ausschalten'
     MENU = ('PicardWulf',)
@@ -713,12 +727,15 @@ def enable(api):
     api.register_album_action(SimilarAlbumsAllSources)
     api.register_tools_menu_action(NativeReview)
     api.register_file_action(SelectedFileReview)
+    api.register_file_action(NativeCollisionPreview)
     api.register_tools_menu_action(AutoApplyToggle)
     api.register_tools_menu_action(AutoSaveToggle)
 
 
 def disable():
     global _aggregator, _controller, _retiring_engine, _save_tracker, _gold_controller
+    from .collision_preview import stop_collision_previews
+    stop_collision_previews()
     if _gold_controller is not None:
         _gold_controller.stop()
         _gold_controller = None
