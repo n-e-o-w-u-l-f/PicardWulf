@@ -43,6 +43,7 @@ class Messages:
         No=2
     answer=1
     dialogs=[]
+    timer_running_in_modal=None
     @classmethod
     def warning(cls,*args):
         cls.dialogs.append(("warn",args))
@@ -52,6 +53,7 @@ class Messages:
     @classmethod
     def question(cls,*args):
         cls.dialogs.append(("question",args))
+        cls.timer_running_in_modal=any(timer.running for timer in Timer.instances)
         return cls.answer
 
 
@@ -90,6 +92,7 @@ class GuiTests(unittest.TestCase):
     def setUp(self):
         Messages.answer=Messages.StandardButton.Yes
         Messages.dialogs.clear()
+        Messages.timer_running_in_modal=None
         Timer.instances.clear()
         ui.stop_safe_imports()
 
@@ -209,6 +212,7 @@ class GuiTests(unittest.TestCase):
                 self.assertTrue(ui.show_safe_import(api,[f],tracker))
                 self.drain()
             self.assertEqual([x["apply"] for x in calls],[False,True])
+            self.assertIs(Messages.timer_running_in_modal,False)
             self.assertTrue(any(m[0]=="info" and "REPLACED" in str(m[1]) for m in Messages.dialogs))
             self.assertTrue(f.is_saved())
 
