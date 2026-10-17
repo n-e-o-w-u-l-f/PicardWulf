@@ -2,6 +2,11 @@
 
 Updated: 2026-10-17 · Project: `n-e-o-w-u-l-f/PicardWulf`
 
+## 2026-10-17 · Picard-Dateiaktion und BMAX-Audit
+
+- **PLUGIN-REGISTERED / LEGION-TESTED**: `SafeStagedFlacImport` im Picard-Dateimenü, aktives Preset-3-Ziel, zweistufige Nutzerbestätigung, FLAC-Größenregel, Backup; neue Serienordner mit Leerordner-Rollback. **318 Tests PASS**, Head `5a84068df0714ae9bebe351d0346e5fbd9d8a7e8`.
+- **OPEN**: Normales `Strg+S` nicht abgefangen; BMAX-Peer/SSH-Port erreichbar, aber `megal`-Login nicht bestätigt (Legion sentinelx ohne SSH-Agent/Key; RDC 0%). Kein Live-Deploy. [Plan](docs/planning/PICARD3-SAVE-INTEGRATION-20261017.md).
+
 ## 2026-10-17 · Gold-CD-Skalierung und strenge Tagprüfung
 
 - SOURCE-ONLY: Gold-Controller liest höchstens 100 Alben je Timer-Durchlauf, ohne sämtliche Alben zu kopieren; Änderungen an der Registry führen zum kontrollierten Iterator-Neustart.
