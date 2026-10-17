@@ -163,7 +163,7 @@ def require_native_tag_only(settings):
     return True
 
 
-def replace_smaller_flac(existing, incoming, backup_dir, *, inspect=inspect_audio):
+def replace_smaller_flac(existing, incoming, backup_dir, *, inspect=inspect_audio, decode=None):
     """Atomic replacement, independent retained backup, rechecked bytes/identity.
 
     Only for files already mapped by Picard to the same *verified* recording.
@@ -210,7 +210,12 @@ def replace_smaller_flac(existing, incoming, backup_dir, *, inspect=inspect_audi
         try:
             committed = (_digest(old) == incoming_digest
                          and _digest(new) == incoming_digest)
-        except (OSError, ValueError):
+            # The staged importer supplies the complete FLAC decoder here.
+            # Decode must be part of the transaction: checking only AFTER
+            # this function returned would skip its automatic rollback.
+            if committed and decode is not None:
+                committed = bool(decode(old))
+        except (OSError, ValueError, RuntimeError):
             committed = False
         if not committed:
             # After native os.replace the former destination no longer exists
