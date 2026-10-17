@@ -134,6 +134,81 @@ class StagedImportTests(unittest.TestCase):
             self.assertTrue(Path(opt["library_root"]).is_dir())
             self.assertTrue(src.is_file())
 
+    def test_reviewed_replace_success_is_bound_to_original_preview(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src,dst,back,opt=self.fixture(tmp)
+            snapshot=imp.import_staged_flac(src,dst,**opt)
+            self.assertEqual(snapshot["action"],"WOULD_REPLACE")
+            self.assertEqual(len(snapshot["source_sha256"]),64)
+            self.assertEqual(len(snapshot["destination_sha256"]),64)
+            out=imp.import_staged_flac(src,dst,apply=True,
+                                       expected_preview=snapshot,**opt)
+            self.assertEqual(out["action"],"REPLACED")
+            self.assertEqual(dst.read_bytes(),src.read_bytes())
+            self.assertTrue(src.is_file())
+
+    def test_changed_staging_bytes_after_preview_abstains(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src,dst,back,opt=self.fixture(tmp)
+            snapshot=imp.import_staged_flac(src,dst,**opt)
+            old=dst.read_bytes()
+            src.write_bytes(b"X"*src.stat().st_size) # same size and identity
+            with self.assertRaisesRegex(imp.StagedImportRejected,
+                                        "changed after confirmed preview"):
+                imp.import_staged_flac(src,dst,apply=True,
+                                       expected_preview=snapshot,**opt)
+            self.assertEqual(dst.read_bytes(),old)
+            self.assertEqual(list(back.iterdir()),[])
+
+    def test_changed_destination_bytes_after_preview_abstains(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src,dst,back,opt=self.fixture(tmp)
+            snapshot=imp.import_staged_flac(src,dst,**opt)
+            dst.write_bytes(b"Z"*dst.stat().st_size)
+            with self.assertRaisesRegex(imp.StagedImportRejected,
+                                        "changed after confirmed preview"):
+                imp.import_staged_flac(src,dst,apply=True,
+                                       expected_preview=snapshot,**opt)
+            self.assertEqual(dst.read_bytes(),b"Z"*15)
+            self.assertTrue(src.is_file())
+            self.assertEqual(list(back.iterdir()),[])
+
+    def test_new_destination_appears_during_confirmation_abstains(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src,dst,back,opt=self.fixture(tmp,existing=None)
+            snapshot=imp.import_staged_flac(src,dst,**opt)
+            self.assertEqual(snapshot["action"],"WOULD_CREATE")
+            dst.write_bytes(b"ANOTHER_USER_TRACK")
+            with self.assertRaisesRegex(imp.StagedImportRejected,
+                                        "changed after confirmed preview"):
+                imp.import_staged_flac(src,dst,apply=True,
+                                       expected_preview=snapshot,**opt)
+            self.assertEqual(dst.read_bytes(),b"ANOTHER_USER_TRACK")
+            self.assertEqual(list(back.iterdir()),[])
+
+    def test_missing_album_directory_stays_absent_if_preview_stale(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src,dst,back,opt=self.fixture(tmp,existing=None)
+            album=Path(opt["library_root"])/"Series"/"Volume II"/"Track.flac"
+            snapshot=imp.import_staged_flac(src,album,**opt)
+            src.write_bytes(b"NEW"*20)
+            with self.assertRaises(imp.StagedImportRejected):
+                imp.import_staged_flac(src,album,apply=True,
+                                       expected_preview=snapshot,**opt)
+            self.assertFalse(album.parent.exists())
+            self.assertEqual(list(back.iterdir()),[])
+
+    def test_manipulated_expected_decision_cannot_be_applied(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src,dst,back,opt=self.fixture(tmp)
+            snapshot=imp.import_staged_flac(src,dst,**opt)
+            forged=dict(snapshot,action="WOULD_SKIP")
+            with self.assertRaises(imp.StagedImportRejected):
+                imp.import_staged_flac(src,dst,apply=True,
+                                       expected_preview=forged,**opt)
+            self.assertEqual(dst.read_bytes(),b"T"*15)
+            self.assertEqual(list(back.iterdir()),[])
+
     def test_conflicting_identity_is_review_no_write(self):
         with tempfile.TemporaryDirectory() as tmp:
             src,dst,back,opt=self.fixture(tmp,incoming=40,existing=20)
