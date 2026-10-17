@@ -212,6 +212,8 @@ class GuiTests(unittest.TestCase):
                 self.assertTrue(ui.show_safe_import(api,[f],tracker))
                 self.drain()
             self.assertEqual([x["apply"] for x in calls],[False,True])
+            self.assertEqual(calls[1]["expected_preview"],
+                             {"action":"WOULD_REPLACE"})
             self.assertIs(Messages.timer_running_in_modal,False)
             self.assertTrue(any(m[0]=="info" and "REPLACED" in str(m[1]) for m in Messages.dialogs))
             self.assertTrue(f.is_saved())
