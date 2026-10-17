@@ -36,12 +36,30 @@ def _text(metadata, name):
     return str(value or "").strip()
 
 
+def _values(metadata, name):
+    getter = getattr(metadata, "get", None)
+    if getter is None:
+        return ()
+    value = getter(name, "")
+    raw = value if isinstance(value, (list, tuple)) else (value,)
+    return tuple(str(item).strip() for item in raw
+                 if item is not None and str(item).strip())
+
+
 def _same_tag(name, observed, expected):
-    value = str(observed or "").strip()
-    if name in ("tracknumber", "discnumber"):
-        value = value.split("/", 1)[0]
-        expected = expected.split("/", 1)[0]
-    return " ".join(value.casefold().split()) == " ".join(expected.casefold().split())
+    """Compare ALL FLAC tag values rather than silently accepting only the first."""
+    lhs = observed if isinstance(observed, (list, tuple)) else (observed,)
+    rhs = expected if isinstance(expected, (list, tuple)) else (expected,)
+    def normal(values):
+        cleaned = []
+        for value in values:
+            text = str(value or "").strip()
+            if name in ("tracknumber", "discnumber"):
+                text = text.split("/", 1)[0]
+            if text:
+                cleaned.append(" ".join(text.casefold().split()))
+        return tuple(cleaned)
+    return normal(lhs) == normal(rhs)
 
 
 def capture_gold(album, tagger, tracker=None):
@@ -86,11 +104,12 @@ def capture_gold(album, tagger, tracker=None):
                 return None
             if _text(metadata, "~picardwulf_decision") in ("review", "conflict", "abstain"):
                 return None
-            values = tuple((key, _text(metadata, key)) for key in _FIELDS + _OPTIONAL
-                           if key in _FIELDS or _text(metadata, key))
+            values = tuple((key, _values(metadata, key)) for key in _FIELDS + _OPTIONAL
+                           if key in _FIELDS or _values(metadata, key)
+                           or _values(original, key))
             if any(not val for key, val in values if key in _FIELDS):
                 return None
-            if any(not _same_tag(key, _text(original, key), val) for key, val in values):
+            if any(not _same_tag(key, _values(original, key), val) for key, val in values):
                 return None
             records.append((filename, values))
         return album_id, tuple(records)
@@ -120,8 +139,6 @@ def verify_gold_files(snapshot):
                 actual = audio.tags.get(name)
                 if actual is None:
                     return False
-                if isinstance(actual, (list, tuple)):
-                    actual = actual[0] if actual else ""
                 if not _same_tag(name, actual, expected):
                     return False
             after = path.stat()
