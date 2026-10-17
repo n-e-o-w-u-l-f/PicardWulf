@@ -59,7 +59,7 @@ def proposal_for_auto(q, result):
     return candidate,proposal
 
 
-def apply_best_to_file(file, q, result, *, save=False, verified_backup=None, save_tracker=None):
+def apply_best_to_file(file, q, result, *, save=False, verified_backup=None, save_tracker=None, native_settings=None):
     """Only call from the GUI thread. No write occurs until backup succeeds."""
     candidate,proposal=proposal_for_auto(q,result)
     md=getattr(file,'metadata',None)
@@ -84,6 +84,14 @@ def apply_best_to_file(file, q, result, *, save=False, verified_backup=None, sav
                 clear_mbid.append(field)
                 changes[field]=(str(md[field]),'[remove stale MusicBrainz assignment]')
     if save and changes:
+        # Public Picard pre-save processors cannot cancel the native
+        # asynchronous rename. Refuse plugin-initiated saves while Picard's
+        # rename/move options could bypass the FLAC collision arbitration.
+        from .retention_policy import require_native_tag_only, RetentionRejected
+        try:
+            require_native_tag_only(native_settings)
+        except RetentionRejected as exc:
+            raise UnsafeCandidate(str(exc)) from exc
         if not getattr(file,'can_save',True) or not getattr(file,'can_edit_tags',True):
             raise UnsafeCandidate('Datei nicht beschreibbar.')
         from .save_tracking import check_backup_receipt
@@ -300,7 +308,8 @@ class AutoApplyController:
             if receipt.get('value') is not True:
                 raise UnsafeCandidate('Original-Identität nicht bestätigt; nicht speichern.')
             apply_best_to_file(file,watch.query,result['payload'],save=True,
-                               verified_backup=backup,save_tracker=self.save_tracker)
+                               verified_backup=backup,save_tracker=self.save_tracker,
+                               native_settings=self.api.global_config.setting)
         except Exception as exc:
             self.api.logger.warning('PicardWulf backup/save: %s',type(exc).__name__)
         self.watches.pop(identity,None)
