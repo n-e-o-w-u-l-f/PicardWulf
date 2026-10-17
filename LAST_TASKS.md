@@ -2,6 +2,13 @@
 
 Updated: 2026-10-17 · Project: `n-e-o-w-u-l-f/PicardWulf`
 
+## 2026-10-17 · Gold-CD-Skalierung und strenge Tagprüfung
+
+- SOURCE-ONLY: Gold-Controller liest höchstens 100 Alben je Timer-Durchlauf, ohne sämtliche Alben zu kopieren; Änderungen an der Registry führen zum kontrollierten Iterator-Neustart.
+- Picards eigene Option `remove_complete_albums_after_save` muss nachweislich **False** sein, sonst bleibt die PicardWulf-Goldentfernung gesperrt. Erneute Kontrolle vor Qt-Retirement; `Tag-Speicherstatus` zeigt GESPERRT/NICHT GESTARTET/AKTIV. Picards native frühere Entfernung ist damit nicht automatisch deaktiviert; BMAX-Einstellung und Laufzeit bleiben OPEN.
+- Picard `Metadata.getall()` statt `get()` für alle Mehrfachwerte; zusätzliche Release-/Genre-/ISRC-Tags gegen Originalmetadaten und echte FLAC-Disk-Tags prüfen. Unterschiedlicher zweiter Tag-Wert oder entfernte Album-ID blockiert die UI-Entfernung.
+- **304 Tests PASS** auf Legion, `compileall`/Git-Diff PASS, Code-HEAD `6c6c015d1d30097553bf6cbd7e86c2f5a9fd1c9b`. Kein Windows-Deployment, keine Originalmusik verändert. PR #1 DRAFT. [Evidence](docs/planning/PICARD3-RETENTION-GATES-2026-10-17.md).
+
 ## 2026-10-17 · Staged FLAC actual arbitration (without native Picard hook)
 
 - **IMPLEMENTED SOURCE-ONLY** `neowulf_picard_repair/staged_flac_import.py`: offline `import_staged_flac` default `apply=False`, explicit `apply=True`; verified `WOULD_REPLACE/SKIP/CREATE` → `REPLACED/SKIPPED/CREATED`. Independent staging, library and recovery roots; full FLAC decoder; source retained; SHA-256 verified backup of replaced target; atomic replace/exclusive new target; fail-closed locks, invalid identity and symlink/inode conflicts. No MP3 or staging-source deletion.
