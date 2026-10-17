@@ -67,6 +67,43 @@ class RetentionTests(unittest.TestCase):
                              "REVIEW")
             self.assertEqual(old.stat().st_size, 20)
 
+    def test_different_musicbrainz_release_prevents_replacement(self):
+        with tempfile.TemporaryDirectory() as t:
+            old = self.make(t, "existing.flac", 20)
+            new = self.make(t, "incoming.flac", 90)
+            def tagged(path):
+                value = inspect(path)
+                release = "mbid-old-release" if Path(path) == old else "mbid-new-release"
+                value["evidence"] = (("musicbrainz_albumid", release),)
+                return value
+            self.assertEqual(policy.decide_duplicate(old, new, inspect=tagged)["action"],
+                             "REVIEW")
+            self.assertEqual(old.stat().st_size, 20)
+
+    def test_one_sided_isrc_is_not_positive_identity(self):
+        with tempfile.TemporaryDirectory() as t:
+            old = self.make(t, "existing.flac", 20)
+            new = self.make(t, "incoming.flac", 90)
+            def tagged(path):
+                value = inspect(path)
+                value["evidence"] = (("isrc", "DETEST1234567" if Path(path) == old else ""),)
+                return value
+            self.assertEqual(policy.decide_duplicate(old, new, inspect=tagged)["action"],
+                             "REVIEW")
+
+    def test_matching_recording_and_release_ids_permit_size_decision(self):
+        with tempfile.TemporaryDirectory() as t:
+            old = self.make(t, "existing.flac", 20)
+            new = self.make(t, "incoming.flac", 90)
+            def tagged(path):
+                value = inspect(path)
+                value["evidence"] = (("musicbrainz_recordingid", "same-recording"),
+                                     ("musicbrainz_albumid", "same-release"),
+                                     ("isrc", "DETEST1234567"))
+                return value
+            self.assertEqual(policy.decide_duplicate(old, new, inspect=tagged)["action"],
+                             "REPLACE")
+
     def test_mp3_never_removed_without_decoded_matching_flac(self):
         with tempfile.TemporaryDirectory() as t:
             mp3 = self.make(t, "track.mp3", 20)
