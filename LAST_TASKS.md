@@ -12,6 +12,15 @@ Updated: 2026-10-17 · Project: `n-e-o-w-u-l-f/PicardWulf`
 - Picard 3 native General setting `remove_complete_albums_after_save` is documented; **not yet enabled/tested on BMAX**, and its native complete/saved check is not independent PicardWulf zero-discrepancy verification.
 - Acceptance gates and missing runtime evidence: [Picard 3 retention plan](docs/planning/PICARD3-RETENTION-GATES-2026-10-17.md). NEXT: implement collision interception + strict UI gold cleanup; then disposable real-file BMAX tests, review, merge and deployment. Target version remains **v1.0**.
 
+## 2026-10-17 · Strict gold-CD UI retirement continuation
+
+- STATUS: **SOURCE IMPLEMENTED / SYNTHETIC VERIFIED / BMAX NOT DEPLOYED**. Built on the existing retention draft PR #1; source code remains on `feature/picard3-retention-policy-20261017`. Main and the active Windows Picard/preset 3 are untouched.
+- Picard 3.0.0rc4 native auto-remove happens in its post-save hook, potentially before PicardWulf's asynchronous independent readback. Strict mode therefore needs its own delayed Qt GUI retirement and requires the built-in auto-remove setting to be OFF during live acceptance; no silent Picard.ini change was made.
+- New `gold_retirement.py`: checks every track mapped and saved, all actual files FLAC, no errors/review mismatches, on-disk FLAC tags independently verified on a worker. Qt queued completion rechecks album/SaveTracker state before **UI-only** `panel.remove([album])`. Bounded rotation across albums and 60-second retry; zero disk writes by this controller.
+- `SaveTracker` now records bounded per-path `PENDING/VERIFIED/MISMATCH/UNKNOWN_TIMEOUT` and exposes in-flight state. Installer inventory includes new plugin module. Fake-Qt race tests, negative matching cases and generated real-FLAC tag checks added.
+- **PASS:** independent fresh Legion checkout at `ce9e3f4721ca651b13e8460541198f461ab44558`; 258 Python tests, compileall and git diff --check; recovered test-harness `NameError` by fixing class-scope fixture, no app-code rollback needed. [Scope and evidence](docs/planning/PICARD3-RETENTION-GATES-2026-10-17.md).
+- **OPEN:** native file destination collision interception (Picard's public pre-save plugin hook cannot safely cancel/redirect a native rename); actual BMAX interactive Picard 3 execution, Qt integration, native setting, Windows locks/FLAC decoder and disposable-media retention tests. MP3 cleanup remains limited to verified same-stem partners following PicardWulf save. Do not merge, tag, deploy or delete client media yet. Keep PR DRAFT.
+
 ## Fixed target version
 
 - **TARGET_VERSION: v1.0** (no interim v1.0.1 / 1.0.0 version designation for source milestones).
