@@ -35,3 +35,17 @@ Target remains PicardWulf **v1.0**; no new release tag or Windows rollout.
 5. Preserve source HEAD, tests, logs and state; only after all gates PASS merge/release/deploy and independently verify live behavior.
 
 Documentation: https://picard-docs.musicbrainz.org/en/v3.0/config/options_general.html
+
+## Continuation: strict gold UI-retirement source gate (2026-10-17)
+
+- Verified actual upstream **Picard 3.0.0rc4** code: `Tagger._remove_album_if_complete` checks complete + no unsaved immediately in its own post-save hook. This is NOT independent FLAC/PicardWulf tag readback. A native auto-removal setting already enabled on BMAX can therefore remove an album before the stricter plugin gate; disable the built-in **Remove complete albums after saving** option during strict-mode acceptance and let PicardWulf's own gold controller perform the retirement. The source branch deliberately does not silently change the owner's existing Picard.ini or preset 3.
+- New `gold_retirement.py` `capture_gold` requires loaded and current album identity, all tracks matched, no unsaved/unmatched or errors, one distinct saved FLAC per track, no PicardWulf conflict flag, and exact original/current metadata consistency. The worker reads actual FLAC content/tags via Mutagen off the GUI thread; success is rechecked after queued Qt delivery, then `api.tagger.window.panel.remove([album])` is used (the same UI-only entry point as Picard's native remover). **No audio unlink or recycling is performed by gold retirement.**
+- `SaveTracker` provides bounded path-specific verification outcomes and in-flight detection. A pending, unverified, mismatched, timed-out or failed save blocks gold retirement. The controller uses bounded round-robin scans of all albums (at most 100 per tick) and 60-second retry backoff on failed disk readback; no file I/O on the GUI thread. The plugin starts/stops the controller during normal enable/disable only with a real Qt window; installer module inventory updated.
+- Synthetic Qt queued-delivery tests check that a worker completion alone never removes an album; only GUI delivery after renewed eligibility does. Concurrent saves, later mismatches and albums removed elsewhere abort retirement. A generated **real FLAC** was used to validate successful and mismatched tag readback; same disposable integration also tests FLAC/MP3 retention.
+- **Verified on Legion source HEAD `213311e4bab9482ac5a4c3df6656f6670264caaf`:** 255 Python tests PASS, compileall PASS, git diff --check PASS. Initial mock Qt test failure was a test-only nested Python class scoping `NameError`; corrected the stub and reran the complete suite. No external paid CI used.
+
+### Remaining production gates
+
+- **BMAX-B6, user `megal`**: active preset/profile, Picard 3 build, running plugin version, native auto-album removal setting, PyQt6 queued delivery, FLAC command and Windows file locks remain unverified due missing authenticated live access and RDC quota.
+- **Automatic destination collision resolution** is still NOT installed into Picard's native save path. The public pre-save hook does not itself provide a documented cancel/skip/redirect mechanism; do not monkey-patch private `File._save_and_rename` or pretend that a size decision file helper intercepts a native `(1)` rename. Needs explicit upstream-compatible integration and Windows disposable-file tests.
+- Source checks do not authorize deployment, merge, release or deletion of personal MP3 media. Leave PR as DRAFT until live verification of all requested behavior.
