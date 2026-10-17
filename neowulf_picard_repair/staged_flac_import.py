@@ -231,12 +231,13 @@ def import_staged_flac(source, destination, *,
             if action == "CREATE":
                 return _install_new_exclusively(original, target,
                                                 inspect=inspect, decode=decode)
-            result = replace_smaller_flac(target, original, recovery, inspect=inspect)
+            # Full decoder validation belongs INSIDE the replacement
+            # transaction so a failing post-commit stream restores the prior
+            # canonical FLAC rather than merely leaving a backup behind.
+            result = replace_smaller_flac(target, original, recovery,
+                                          inspect=inspect, decode=decode)
             if result.get("action") != "REPLACED":
                 raise StagedImportRejected("Collision changed before replacement")
-            if not decode(target):
-                raise StagedImportRejected(
-                    "Replacement FLAC decode failed; recovery backup retained")
             return dict(result, source_preserved=str(original))
 
         except Exception:
