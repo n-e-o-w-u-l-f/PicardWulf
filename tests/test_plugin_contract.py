@@ -97,6 +97,27 @@ class TestContract(unittest.TestCase):
         self.assertTrue(api.plugin_config['auto_apply_best'])
         self.assertFalse(api.plugin_config['auto_save_with_backup'])
         self.assertEqual(api.global_config.setting['file_renaming_scripts']['a']['script'],before)
+    def test_auto_save_toggle_refuses_unsafe_native_move(self):
+        api=Api()
+        api.global_config.setting.update({'rename_files':False,'move_files':True})
+        action=plugin.AutoSaveToggle()
+        action.api=api
+        FakeMessageBox.answer=FakeMessageBox.StandardButton.Yes
+        action.callback([])
+        self.assertFalse(api.plugin_config.get('auto_save_with_backup',False))
+        self.assertTrue(any(
+            entry[0]=='warn' and 'Umbenennen' in str(entry[1])
+            for entry in FakeMessageBox.messages))
+
+    def test_auto_save_toggle_allows_tag_only_mode(self):
+        api=Api()
+        api.global_config.setting.update({'rename_files':False,'move_files':False})
+        action=plugin.AutoSaveToggle()
+        action.api=api
+        FakeMessageBox.answer=FakeMessageBox.StandardButton.Yes
+        action.callback([])
+        self.assertTrue(api.plugin_config.get('auto_save_with_backup',False))
+
     def test_gold_status_exposes_native_early_retirement_warning(self):
         api=Api()
         api.global_config.setting['remove_complete_albums_after_save']=True
