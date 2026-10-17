@@ -562,11 +562,24 @@ class TagSaveStatus(BaseAction):
             return
         status=_save_tracker.status()
         totals=', '.join(f'{entry["state"]}' for entry in status['recent'][-8:])
+        from .gold_retirement import native_gold_retirement_allowed
+        if not self.api.plugin_config.get('gold_auto_retire', True):
+            gold_state='AUS (PicardWulf-Einstellung)'
+        elif not native_gold_retirement_allowed(self.api):
+            gold_state=('GESPERRT: Picards eigene Option "Vollständige Alben nach dem '
+                        'Speichern entfernen" ist aktiv oder nicht verifizierbar. '
+                        'Picard kann ohne unabhängige PicardWulf-Prüfung entfernen; '
+                        'diese native Option zuerst in Picard deaktivieren.')
+        elif _gold_controller is None:
+            gold_state='NICHT GESTARTET (Plugin oder Qt-Controller prüfen)'
+        else:
+            gold_state='AKTIV (nur nach unabhängiger FLAC-Prüfung)'
         _show('PicardWulf – Tag-Speicherstatus',
               f'Ausstehende Picard-Speicherungen: {status["pending"]}\n'
               f'Laufende Dateiprüfungen: {status["verifying"]}\n'
               f'Laufende Wiederherstellungen: {status["restoring"]}\n'
-              f'Letzte Prüfergebnisse: {totals or "keine"}\n\n'
+              f'Letzte Prüfergebnisse: {totals or "keine"}\n'
+              f'Goldene CD automatisch aus der Ansicht: {gold_state}\n\n'
               'VERIFIED bedeutet Post-Save-Ereignis plus übereinstimmend '
               'zurückgelesene Tags und intakte Sicherung. '
               'UNVERIFIED oder MISMATCH bedeutet NICHT bestätigt. '
