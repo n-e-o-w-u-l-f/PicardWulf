@@ -64,6 +64,26 @@ class StagedImportTests(unittest.TestCase):
             self.assertEqual(src.read_bytes(),b"S"*60)
             self.assertFalse(any(p.name.endswith(".lock") for p in back.iterdir()))
 
+    def test_post_commit_decoder_failure_restores_existing_flac(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source, target, recovery, opts = self.fixture(tmp)
+            old_bytes=target.read_bytes()
+            new_bytes=source.read_bytes()
+            def decoder(path):
+                data=Path(path).read_bytes()
+                # Before commit both streams pass; after atomically replacing
+                # target with the larger source, target decodes as invalid.
+                return not (Path(path)==target and data==new_bytes)
+            opts['decode']=decoder
+            with self.assertRaises(imp.StagedImportRejected) as err:
+                imp.import_staged_flac(source,target,apply=True,**opts)
+            self.assertIn('original restored',str(err.exception))
+            self.assertEqual(target.read_bytes(),old_bytes)
+            self.assertEqual(source.read_bytes(),new_bytes)
+            backups=[p for p in recovery.iterdir() if p.is_file()]
+            self.assertEqual(len(backups),1)
+            self.assertEqual(backups[0].read_bytes(),old_bytes)
+
     def test_preserve_larger_target_and_source(self):
         with tempfile.TemporaryDirectory() as tmp:
             src,dst,back,opt=self.fixture(tmp,existing=90,incoming=15)
