@@ -6,6 +6,7 @@ Never perform file mutation here; use the exact File.make_filename() result
 to preview potential destinations before the user starts a save.
 """
 from concurrent.futures import ThreadPoolExecutor
+from itertools import islice
 import os
 from pathlib import Path
 
@@ -70,7 +71,7 @@ def capture_native_targets(files, settings, limit=20):
     except (KeyError, TypeError, ValueError):
         return ()
     snapshots = []
-    for file in tuple(files)[:limit]:
+    for file in islice(files, limit):
         path = getattr(file, "filename", None)
         metadata = getattr(file, "metadata", None)
         maker = getattr(file, "make_filename", None)
