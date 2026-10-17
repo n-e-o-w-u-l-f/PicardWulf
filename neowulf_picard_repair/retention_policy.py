@@ -67,13 +67,30 @@ def inspect_audio(path):
     identity = _identity(audio)
     if identity is None:
         raise RetentionRejected("Incomplete tags; cannot verify track identity")
+    # If a provider/edition identifier is present, a missing or conflicting
+    # identifier in the counterpart is NOT positive evidence of identity.
+    evidence_keys = ("musicbrainz_recordingid", "musicbrainz_albumid", "isrc",
+                     "barcode", "date", "albumartist", "releasestatus")
+    evidence = tuple((key, _one(audio, key)) for key in evidence_keys)
     return {"path": path, "extension": path.suffix.casefold(),
-            "size": path.stat().st_size, "identity": identity, "seconds": seconds}
+            "size": path.stat().st_size, "identity": identity, "seconds": seconds,
+            "evidence": evidence}
 
 
 def _match(left, right):
-    return (left["identity"] == right["identity"] and
-            abs(left["seconds"] - right["seconds"]) <= 1.5)
+    if not (left["identity"] == right["identity"] and
+            abs(left["seconds"] - right["seconds"]) <= 1.5):
+        return False
+    left_evidence = dict(left.get("evidence") or ())
+    right_evidence = dict(right.get("evidence") or ())
+    # Do not merge different editions/recordings when an explicit source tag
+    # supplies identity evidence on either side. Unmatched fields fail closed.
+    for key in left_evidence.keys() | right_evidence.keys():
+        old = str(left_evidence.get(key, "") or "")
+        new = str(right_evidence.get(key, "") or "")
+        if (old or new) and old != new:
+            return False
+    return True
 
 
 def decide_duplicate(existing, incoming, *, inspect=inspect_audio):
