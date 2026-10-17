@@ -146,6 +146,19 @@ class StagedImportTests(unittest.TestCase):
             with self.assertRaises(imp.StagedImportRejected):
                 imp.import_staged_flac(src,alias/"Track.flac",apply=True,**opt)
 
+    def test_reject_source_and_destination_hardlinks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src,dst,back,opt=self.fixture(tmp)
+            dst.unlink()
+            try:
+                os.link(src,dst)
+            except OSError:
+                self.skipTest("Hardlinks unavailable")
+            with self.assertRaises(imp.StagedImportRejected):
+                imp.import_staged_flac(src,dst,apply=True,**opt)
+            self.assertEqual(dst.read_bytes(),src.read_bytes())
+            self.assertEqual(list(back.iterdir()),[])
+
     def test_stale_lock_blocks_while_preserving_music(self):
         with tempfile.TemporaryDirectory() as tmp:
             src,dst,back,opt=self.fixture(tmp)
