@@ -2,6 +2,12 @@
 
 Updated: 2026-10-17 · Project: `n-e-o-w-u-l-f/PicardWulf`
 
+## 2026-10-17 · Native Save Guard und echter FLAC-Rollback
+
+- Nach fehlgeschlagener Post-Commit-SHA-256- oder Decoderprüfung wird die vorherige FLAC jetzt **tatsächlich** aus dem separaten Backup wiederhergestellt; fehlerhafte Wiederherstellung bleibt explizit UNVERIFIED.
+- PicardWulf-eigene Auto-/manuelle `File.save()` erfordern `rename_files=False` und `move_files=False`; Toggle verweigert risikoreiche Aktivierung ohne Änderung an Picard.ini/Preset 3.
+- **326 Tests PASS**, Legion-HEAD `d5d3e2daa224c9f40914d4af71798a2e2e551fe0`; **BMAX und natives Ctrl+S weiter OPEN**. PR #1 DRAFT.
+
 ## 2026-10-17 · Picard-Dateiaktion und BMAX-Audit
 
 - **PLUGIN-REGISTERED / LEGION-TESTED**: `SafeStagedFlacImport` im Picard-Dateimenü, aktives Preset-3-Ziel, zweistufige Nutzerbestätigung, FLAC-Größenregel, Backup; neue Serienordner mit Leerordner-Rollback. **318 Tests PASS**, Head `5a84068df0714ae9bebe351d0346e5fbd9d8a7e8`.
