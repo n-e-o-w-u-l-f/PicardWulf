@@ -37,11 +37,17 @@ def _text(metadata, name):
 
 
 def _values(metadata, name):
-    getter = getattr(metadata, "get", None)
-    if getter is None:
-        return ()
-    value = getter(name, "")
-    raw = value if isinstance(value, (list, tuple)) else (value,)
+    # Real Picard Metadata.get() joins multi-valued tags into one string.
+    # getall() is the documented source of their individual values.
+    getall = getattr(metadata, "getall", None)
+    if callable(getall):
+        raw = getall(name)
+    else:
+        getter = getattr(metadata, "get", None)
+        if getter is None:
+            return ()
+        value = getter(name, "")
+        raw = value if isinstance(value, (list, tuple)) else (value,)
     return tuple(str(item).strip() for item in raw
                  if item is not None and str(item).strip())
 
