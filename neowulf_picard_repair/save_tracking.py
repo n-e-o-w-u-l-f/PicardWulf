@@ -262,19 +262,26 @@ class SaveTracker:
         with self._lock:
             self._verifying-=1
             self._last.append(dict(result,backup=backup))
-        # Verification is already complete. Optional cleanup runs on the
-        # worker callback, never the Picard GUI or file-post-save thread.
+        # add_done_callback can execute synchronously if the future is already
+        # complete. ALWAYS schedule potentially slow cleanup off the GUI.
         if result.get('state')=='VERIFIED' and self._on_verified is not None:
             try:
-                cleanup=self._on_verified(path)
-                if cleanup and cleanup.get('action') in ('REMOVED','REVIEW'):
-                    with self._lock:self._last.append(
-                        {'state':'MP3_'+cleanup['action'],
-                         'reason':cleanup.get('reason',''),
-                         'backup':cleanup.get('backup','')})
-            except Exception as exc:
+                self._pool.submit(self._cleanup_verified, path)
+            except RuntimeError:
                 with self._lock:self._last.append(
-                    {'state':'MP3_REVIEW','reason':type(exc).__name__})
+                    {'state':'MP3_REVIEW','reason':'worker_stopped'})
+
+    def _cleanup_verified(self, path):
+        try:
+            cleanup=self._on_verified(path)
+            if cleanup and cleanup.get('action') in ('REMOVED','REVIEW'):
+                with self._lock:self._last.append(
+                    {'state':'MP3_'+cleanup['action'],
+                     'reason':cleanup.get('reason',''),
+                     'backup':cleanup.get('backup','')})
+        except Exception as exc:
+            with self._lock:self._last.append(
+                {'state':'MP3_REVIEW','reason':type(exc).__name__})
 
     def request_restore(self, manifest, new_destination):
         """Non-blocking request after explicit operator confirmation in UI."""
