@@ -97,6 +97,30 @@ class TestContract(unittest.TestCase):
         self.assertTrue(api.plugin_config['auto_apply_best'])
         self.assertFalse(api.plugin_config['auto_save_with_backup'])
         self.assertEqual(api.global_config.setting['file_renaming_scripts']['a']['script'],before)
+    def test_gold_status_exposes_native_early_retirement_warning(self):
+        api=Api()
+        api.global_config.setting['remove_complete_albums_after_save']=True
+        with patch.object(plugin,'AutoApplyController'), patch.object(plugin,'UniversalAggregator'):
+            plugin.enable(api)
+        action=plugin.TagSaveStatus()
+        action.api=api
+        action.callback([])
+        text=' '.join(str(x) for x in FakeMessageBox.messages)
+        self.assertIn('GESPERRT',text)
+        self.assertIn('PicardWulf-Prüfung',text)
+
+    def test_gold_status_does_not_claim_active_without_controller(self):
+        api=Api()
+        api.global_config.setting['remove_complete_albums_after_save']=False
+        with patch.object(plugin,'AutoApplyController'), patch.object(plugin,'UniversalAggregator'):
+            plugin.enable(api)
+        action=plugin.TagSaveStatus()
+        action.api=api
+        action.callback([])
+        text=' '.join(str(x) for x in FakeMessageBox.messages)
+        self.assertIn('NICHT GESTARTET',text)
+        self.assertNotIn('GESPERRT',text)
+
     def test_picard_v3_post_save_hook_dispatches_to_tracker(self):
         api=Api()
         with patch.object(plugin,'AutoApplyController'), patch.object(plugin,'UniversalAggregator'):
