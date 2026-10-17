@@ -16,7 +16,7 @@ Target remains PicardWulf **v1.0**; no new release tag or Windows rollout.
 - `save_tracking.py`: optional worker-only retention callback *after* post-save tag readback VERIFIED. Never execute filesystem cleanup directly from Picard GUI hooks. Skip cleanup after MISMATCH, UNVERIFIED, or missing post-save signal.
 - `__init__.py`: `flac_only_cleanup=True` default for PicardWulf-initiated, backup-protected, *verified FLAC saves*; independently backs up same-stem MP3 before attempting deletion. If `flac` command is unavailable, or no matching MP3 is found, no deletion.
 - Installer integrity inventory includes the new module.
-- 238 synthetic Python tests PASS, including duplicate comparison and verified-only callback. GitHub branch and Legion fresh checkout; tested commit logged separately in project LAST.
+- 240 Python tests PASS on Legion, including synthetic duplicate/worker regressions and a generated real FLAC/MP3 audio integration test (full decoder, MP3 recovery receipt and atomic FLAC replacement). GitHub branch and Legion fresh checkout; tested commit logged separately in project LAST.
 
 ## Explicitly OPEN (not accepted)
 
@@ -24,7 +24,7 @@ Target remains PicardWulf **v1.0**; no new release tag or Windows rollout.
 - **Gold status auto-retirement** is not enabled on BMAX. Native Picard general option can remove complete saved albums, but it is distinct from independent PicardWulf tag readback.
 - **MP3 cleanup coverage** is limited to exact same-stem files on the same directory, and only after PicardWulf verified auto/manual saves. Pre-existing gold albums, different file names, unsaved tracks and library-wide MP3 scanning are not covered.
 - No genuine BMAX/Picard-3 plugin activation, FLAC decoder availability, renamed destinations, Windows file locks, metadata padding, symlinks, or production music acceptance test.
-- No original media deleted, moved or rewritten by this source task. No deployment/restart, no paid CI.
+- Generated disposable synthetic audio was encoded/tested/deleted inside an isolated temporary test directory on Legion. No personal media deleted, moved or rewritten by this source task. No BMAX deployment/restart, no paid CI.
 
 ## Next safe gates
 
