@@ -132,6 +132,22 @@ class TestContract(unittest.TestCase):
             events[0][1](api,witness)
         saved.assert_called_once_with(witness)
 
+    def test_safe_import_file_action_dispatches_selected_files_and_tracker(self):
+        api=Api()
+        with patch.object(plugin,'AutoApplyController'), patch.object(plugin,'UniversalAggregator'):
+            plugin.enable(api)
+        actions=[item[1] for item in api.registered if item[0]=='file_action']
+        matches=[cls for cls in actions if cls.TITLE.startswith(
+            'PicardWulf: FLAC sicher in Musikbibliothek')]
+        self.assertEqual(len(matches),1)
+        action=matches[0]()
+        action.api=api
+        from neowulf_picard_repair import picard_safe_import
+        files=[object()]
+        with patch.object(picard_safe_import,'show_safe_import',return_value=True) as dispatched:
+            action.callback(files)
+        dispatched.assert_called_once_with(api,files,plugin._save_tracker)
+
     def test_context_menu_registers_album_and_cluster_multisource_action(self):
         api=Api()
         with patch.object(plugin,'AutoApplyController'), patch.object(plugin,'UniversalAggregator'):
