@@ -173,16 +173,26 @@ def replace_smaller_flac(existing, incoming, backup_dir, *, inspect=inspect_audi
             stage.unlink(missing_ok=True)
 
 
-def remove_verified_mp3(mp3, flac, *, inspect=inspect_audio, decode=_flac_decode_ok):
-    """Permanent unlink, never recycle bin; never delete the only known copy."""
+def remove_verified_mp3(mp3, flac, backup_receipt=None, *,
+                        inspect=inspect_audio, decode=_flac_decode_ok):
+    """Permanent unlink only with a verified independent recovery copy."""
     mp3 = Path(mp3)
     status = decide_mp3_removal(mp3, flac, inspect=inspect, decode=decode)
     if status["action"] != "REMOVE":
         return status
+    if not isinstance(backup_receipt, dict):
+        raise RetentionRejected("Verified independent MP3 backup receipt required")
+    backup = Path(str(backup_receipt.get("backup", "")))
+    if (backup_receipt.get("path") != str(mp3) or
+            not backup.is_file() or backup.is_symlink() or
+            backup.resolve() == mp3.resolve()):
+        raise RetentionRejected("Unsafe or missing MP3 recovery backup")
     before = _signature(mp3)
     old_hash = _digest(mp3)
-    if _signature(mp3) != before or _digest(mp3) != old_hash:
-        raise RetentionRejected("MP3 changed during verification")
+    if (old_hash != backup_receipt.get("sha256") or
+            old_hash != _digest(backup) or _signature(mp3) != before or
+            _digest(mp3) != old_hash):
+        raise RetentionRejected("MP3 or recovery copy changed during verification")
     mp3.unlink()
     return {"action": "REMOVED", "reason": "verified_flac_counterpart",
-            "removed_sha256": old_hash}
+            "removed_sha256": old_hash, "backup": str(backup)}
