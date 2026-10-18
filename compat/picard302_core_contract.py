@@ -76,7 +76,7 @@ def patch_sources(source: dict[str, str]) -> dict[str, str]:
         """        # Source-preserving native FLAC copy must not relocate companion
         # files from the staging directory. The original native MOVE still
         # removes its source and keeps Picard's original sidecar behavior.
-        if new_filename == old_filename or not os.path.exists(old_filename):
+        if new_filename != old_filename and not os.path.exists(old_filename):
             self._move_additional_files(old_filename, new_filename, config)""",
         "preserve staging companion files after native safe copy")
     file = _replace_once(
