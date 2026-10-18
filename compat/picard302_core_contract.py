@@ -63,6 +63,15 @@ def patch_sources(source: dict[str, str]) -> dict[str, str]:
         "save worker rename call")
     file = _replace_once(
         file,
+        "        self._move_additional_files(old_filename, new_filename, config)",
+        """        # Source-preserving native FLAC copy must not relocate companion
+        # files from the staging directory. The original native MOVE still
+        # removes its source and keeps Picard's original sidecar behavior.
+        if new_filename == old_filename or not os.path.exists(old_filename):
+            self._move_additional_files(old_filename, new_filename, config)""",
+        "preserve staging companion files after native safe copy")
+    file = _replace_once(
+        file,
         "    def _rename(self, old_filename, metadata, settings):",
         "    def _rename(self, old_filename, metadata, settings, destination_loaded=False):",
         "rename policy signature")
