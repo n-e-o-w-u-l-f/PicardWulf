@@ -59,6 +59,7 @@ class NativePicard302CoreTest(unittest.TestCase):
             "get_config":lambda:types.SimpleNamespace(setting={
                 "enable_tag_saving":False,"rename_files":True,
                 "move_files":True,"move_overwrite_existing_files":False,
+                "move_files_to":str(Path(new_target).parent),
                 "delete_empty_dirs":False,"save_images_to_files":False,
                 "move_additional_files":True,
             }),
@@ -145,6 +146,70 @@ class NativePicard302CoreTest(unittest.TestCase):
             self.assertEqual(companion.read_bytes(),b"cover")
             self.assertEqual(file.sidecars,[])
             self.assertEqual(file.moves,[])
+
+    def test_real_decoded_flac_native_worker_end_to_end(self):
+        import shutil
+        import subprocess
+        import wave
+        if not shutil.which("flac"):
+            self.skipTest("flac CLI not installed")
+        try:
+            from mutagen.flac import FLAC
+        except ImportError:
+            self.skipTest("mutagen not installed")
+        import importlib
+        import sys
+        from pathlib import Path
+        import types
+        root_pkg="picard302_native_worker_test"
+        pkg=types.ModuleType(root_pkg)
+        pkg.__path__=[str(Path(__file__).parents[1]/"neowulf_picard_repair")]
+        sys.modules[root_pkg]=pkg
+        bridge=importlib.import_module(root_pkg+".native_move_bridge")
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            staging=root/"staging"
+            library=root/"library"
+            recovery=root/"recovery"
+            for folder in (staging,library,recovery):
+                folder.mkdir()
+            wav=root/"test.wav"
+            with wave.open(str(wav),"wb") as f:
+                f.setnchannels(1)
+                f.setsampwidth(2)
+                f.setframerate(22050)
+                f.writeframes(b"\\x00\\x00"*22050)
+            src=staging/"Track.flac"; dest=library/"Track.flac"
+            subprocess.run(["flac","-f","--silent","-o",str(src),str(wav)],
+                           check=True,capture_output=True)
+            tags=FLAC(str(src))
+            for k,v in {
+                    "artist":"Synthetic Artist","title":"Synthetic Track",
+                    "album":"Synthetic Release","discnumber":"1",
+                    "tracknumber":"1"}.items():
+                tags[k]=v
+            tags.save()
+            shutil.copy2(src,dest)
+            older=dest.read_bytes()
+            tags=FLAC(str(src))
+            tags["comment"]="Independent high metadata payload "+("Q"*50000)
+            tags.save()
+            self.assertGreater(src.stat().st_size,dest.stat().st_size)
+            companion=staging/"cover.jpg"; companion.write_bytes(b"cover")
+            def collision(old,new,settings,loaded):
+                return bridge.arbitrate_native_flac_move(
+                    old,new,settings,recovery,destination_loaded=loaded)
+            file=self.setup_native([collision],dest)
+            result=file._save_and_rename(str(src),{},False)
+            self.assertEqual(result,str(dest))
+            self.assertEqual(dest.read_bytes(),src.read_bytes())
+            self.assertTrue(src.exists())
+            self.assertEqual(companion.read_bytes(),b"cover")
+            self.assertEqual(file.moves,[])
+            self.assertEqual(file.sidecars,[])
+            backups=[p for p in recovery.iterdir() if p.is_file()]
+            self.assertEqual(len(backups),1)
+            self.assertEqual(backups[0].read_bytes(),older)
 
     def test_native_core_bad_receipt_refuses_unverified_commit(self):
         with tempfile.TemporaryDirectory() as d:
