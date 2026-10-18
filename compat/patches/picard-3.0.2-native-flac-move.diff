@@ -1,0 +1,158 @@
+--- a/picard/file.py
++++ b/picard/file.py
+@@ -480,12 +480,22 @@
+             self._release_file_from_player(self.filename)
+         metadata = Metadata()
+         metadata.copy(self.metadata)
++        # Capture loaded-target ownership on the Qt thread. The worker must
++        # not query mutable Tagger/Qt objects to arbitrate FLAC collisions.
++        collision_target_loaded = False
++        if (file_move_collision_processors.functions
++                and self.filename.lower().endswith('.flac')):
++            settings = get_config().setting
++            if settings['rename_files'] or settings['move_files']:
++                proposed = self.make_filename(self.filename, metadata, settings)
++                collision_target_loaded = (
++                    proposed != self.filename and proposed in self.tagger.files)
+         # Track in-flight saves so _saving_finished can coalesce the expensive
+         # selection/metadata-box refresh to once per batch (see PICARD
+         # batch-save memory profiling).
+         self.tagger._saving_files_count += 1
+         thread.run_task(
+-            partial(self._save_and_rename, self.filename, metadata),
++            partial(self._save_and_rename, self.filename, metadata, collision_target_loaded),
+             self._saving_finished,
+             thread_pool=self.tagger.save_thread_pool,
+         )
+@@ -544,7 +554,7 @@
+         if player:
+             player.release_file(filename)
+ 
+-    def _save_and_rename(self, old_filename, metadata):
++    def _save_and_rename(self, old_filename, metadata, collision_target_loaded=False):
+         """Save the metadata."""
+         config = get_config()
+         # Check that file has not been removed since thread was queued
+@@ -578,9 +588,13 @@
+                 self._retry_on_permission_error(save)
+         # Rename files
+         if config.setting['rename_files'] or config.setting['move_files']:
+-            new_filename = self._rename(old_filename, metadata, config.setting)
++            new_filename = self._rename(old_filename, metadata, config.setting, collision_target_loaded)
+         # Move extra files (images, playlists, etc.)
+-        self._move_additional_files(old_filename, new_filename, config)
++        # Source-preserving native FLAC copy must not relocate companion
++        # files from the staging directory. The original native MOVE still
++        # removes its source and keeps Picard's original sidecar behavior.
++        if new_filename == old_filename or not os.path.exists(old_filename):
++            self._move_additional_files(old_filename, new_filename, config)
+         # Delete empty directories
+         if config.setting['delete_empty_dirs']:
+             dirname = os.path.dirname(old_filename)
+@@ -797,10 +811,35 @@
+         new_path = os.path.join(new_dirname, new_filename)
+         return normpath(new_path, realpath=False)
+ 
+-    def _rename(self, old_filename, metadata, settings):
++    def _rename(self, old_filename, metadata, settings, destination_loaded=False):
+         new_filename = self.make_filename(old_filename, metadata, settings)
+         if old_filename == new_filename:
+             return old_filename
++
++        # Explicit source-level extension point, invoked on Picard's native
++        # save worker BEFORE any directory creation, move or overwrite. It
++        # receives plain strings and a settings copy, never a mutable File.
++        # No resolver => upstream native behavior remains unchanged.
++        if old_filename.lower().endswith('.flac'):
++            resolvers = tuple(file_move_collision_processors.functions)
++            if resolvers:
++                if len(resolvers) != 1:
++                    raise RuntimeError('Conflicting native FLAC collision policies')
++                decision = resolvers[0](
++                    old_filename, new_filename, dict(settings),
++                    destination_loaded)
++                if not isinstance(decision, dict):
++                    raise RuntimeError('Invalid native FLAC collision result')
++                action = decision.get('action')
++                if action == 'KEEP':
++                    return old_filename
++                if action == 'COMMITTED':
++                    if (decision.get('destination') != new_filename
++                            or not os.path.isfile(new_filename)):
++                        raise RuntimeError('Native FLAC destination not verified')
++                    return new_filename
++                if action != 'UNHANDLED':
++                    raise RuntimeError('Unexpected native FLAC collision decision')
+ 
+         new_dirname = os.path.dirname(new_filename)
+         os.makedirs(new_dirname, exist_ok=True)
+@@ -1394,6 +1433,7 @@
+ file_post_removal_to_track_processors = PluginFunctions[['Track', File], None](
+     label='file_post_removal_from_track_processors'
+ )
++file_move_collision_processors = PluginFunctions(label='file_move_collision_processors')
+ file_pre_save_processors = PluginFunctions[[File], None](label='file_pre_save_processors')
+ file_post_save_processors = PluginFunctions[[File], None](label='file_post_save_processors')
+ 
+--- a/picard/extension_points/event_hooks.py
++++ b/picard/extension_points/event_hooks.py
+@@ -60,6 +60,7 @@
+     file_post_load_processors,
+     file_post_removal_to_track_processors,
+     file_post_save_processors,
++    file_move_collision_processors,
+     file_pre_save_processors,
+ )
+ from picard.track import Track
+@@ -112,6 +113,17 @@
+     file_post_removal_to_track_processors.register(function.__module__, function, priority)
+ 
+ 
++def register_file_move_collision_processor(function: Callable[..., dict]) -> None:
++    """Register one worker-safe file-move resolver.
++
++    The callback receives (old_filename, target_filename, frozen_settings,
++    destination_loaded). It returns action KEEP, COMMITTED or UNHANDLED.
++    Every callback must be side-effect-safe, not touch File/Tagger/Qt, and
++    ensure COMMITTED is an independently verified, recoverable copy.
++    """
++    file_move_collision_processors.register(function.__module__, function)
++
++
+ def register_file_pre_save_processor(function: Callable[[File], None], priority: int = 0) -> None:
+     """Registers file pre-save processor.
+ 
+--- a/picard/plugin3/api_impl.py
++++ b/picard/plugin3/api_impl.py
+@@ -75,6 +75,7 @@
+     register_file_post_load_processor,
+     register_file_post_removal_from_track_processor,
+     register_file_post_save_processor,
++    register_file_move_collision_processor,
+     register_file_pre_save_processor,
+ )
+ from picard.extension_points.item_actions import (
+@@ -1094,6 +1095,23 @@
+         update_wrapper(wrapped, function)
+         return register_file_post_save_processor(wrapped, priority)
+ 
++    def register_file_move_collision_processor(
++        self, function: Callable[['PluginApi', str, str, dict, bool], dict]
++    ) -> None:
++        """Register a worker-safe cancellable file move collision policy.
++
++        Invoked before Picard's native rename/overwrite on the save worker
++        with (old_filename, target_filename, settings_copy,
++        destination_loaded). Return a dict with action KEEP, COMMITTED or
++        UNHANDLED. Only COMMITTED can return a new file path, and the new
++        target must already be independently verified and recoverable.
++
++        This is a Picard 3.0.2 *core extension*, not part of stock Picard.
++        """
++        wrapped = partial(function, self)
++        update_wrapper(wrapped, function)
++        return register_file_move_collision_processor(wrapped)
++
+     def register_file_pre_save_processor(
+         self, function: Callable[['PluginApi', File], None], priority: int = 0
+     ) -> None:
