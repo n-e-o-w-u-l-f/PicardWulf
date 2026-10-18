@@ -53,22 +53,29 @@ def patch_sources(source: dict[str, str]) -> dict[str, str]:
                 proposed = self.make_filename(self.filename, metadata, settings)
                 collision_target_loaded = (
                     proposed != self.filename and proposed in self.tagger.files)
+        # File.save runs on the GUI thread: snapshot plugin policy before
+        # this job is queued. The worker must not read mutable ProfileConfig.
+        collision_policy_context = None
+        if file_move_collision_processors.functions:
+            policies = tuple(file_move_collision_processors.functions)
+            if len(policies) == 1 and callable(getattr(policies[0], 'prepare', None)):
+                collision_policy_context = policies[0].prepare()
         # Track in-flight saves""",
         "file.save loaded target")
     file = _replace_once(
         file,
         "partial(self._save_and_rename, self.filename, metadata),",
-        "partial(self._save_and_rename, self.filename, metadata, collision_target_loaded),",
+        "partial(self._save_and_rename, self.filename, metadata, collision_target_loaded, collision_policy_context),",
         "file.save worker args")
     file = _replace_once(
         file,
         "    def _save_and_rename(self, old_filename, metadata):",
-        "    def _save_and_rename(self, old_filename, metadata, collision_target_loaded=False):",
+        "    def _save_and_rename(self, old_filename, metadata, collision_target_loaded=False, collision_policy_context=None):",
         "save worker signature")
     file = _replace_once(
         file,
         "self._rename(old_filename, metadata, config.setting)",
-        "self._rename(old_filename, metadata, config.setting, collision_target_loaded)",
+        "self._rename(old_filename, metadata, config.setting, collision_target_loaded, collision_policy_context)",
         "save worker rename call")
     file = _replace_once(
         file,
@@ -82,7 +89,7 @@ def patch_sources(source: dict[str, str]) -> dict[str, str]:
     file = _replace_once(
         file,
         "    def _rename(self, old_filename, metadata, settings):",
-        "    def _rename(self, old_filename, metadata, settings, destination_loaded=False):",
+        "    def _rename(self, old_filename, metadata, settings, destination_loaded=False, collision_policy_context=None):",
         "rename policy signature")
     file = _replace_once(
         file,
@@ -100,7 +107,7 @@ def patch_sources(source: dict[str, str]) -> dict[str, str]:
                     raise RuntimeError('Conflicting native FLAC collision policies')
                 decision = resolvers[0](
                     old_filename, new_filename, dict(settings),
-                    destination_loaded)
+                    destination_loaded, collision_policy_context)
                 if not isinstance(decision, dict):
                     raise RuntimeError('Invalid native FLAC collision result')
                 action = decision.get('action')
@@ -145,7 +152,9 @@ file_pre_save_processors = PluginFunctions[[File], None](label='file_pre_save_pr
     \"\"\"Register one worker-safe file-move resolver.
 
     The callback receives (old_filename, target_filename, frozen_settings,
-    destination_loaded). It returns action KEEP, COMMITTED or UNHANDLED.
+    destination_loaded, frozen_plugin_policy). The last value is captured
+    on the Qt thread by an explicitly registered prepare callback.
+    It returns action KEEP, COMMITTED or UNHANDLED.
     Every callback must be side-effect-safe, not touch File/Tagger/Qt, and
     ensure COMMITTED is an independently verified, recoverable copy.
     \"\"\"
@@ -165,20 +174,24 @@ def register_file_pre_save_processor(function: Callable[[File], None], priority:
         api,
         "    def register_file_pre_save_processor(\n",
         """    def register_file_move_collision_processor(
-        self, function: Callable[['PluginApi', str, str, dict, bool], dict]
+        self, function: Callable[['PluginApi', str, str, dict, bool, object], dict],
+        prepare: Callable[['PluginApi'], object]
     ) -> None:
         \"\"\"Register a worker-safe cancellable file move collision policy.
 
         Invoked before Picard's native rename/overwrite on the save worker
         with (old_filename, target_filename, settings_copy,
-        destination_loaded). Return a dict with action KEEP, COMMITTED or
-        UNHANDLED. Only COMMITTED can return a new file path, and the new
+        destination_loaded, frozen_plugin_policy). The prepare(api) callback
+        runs on the GUI thread during File.save and captures profile options
+        into an immutable primitive tuple. The worker never reads Qt/Config.
+        Return a dict with action KEEP, COMMITTED or UNHANDLED. Only COMMITTED can return a new file path, and the new
         target must already be independently verified and recoverable.
 
         This is a Picard 3.0.2 *core extension*, not part of stock Picard.
         \"\"\"
         wrapped = partial(function, self)
         update_wrapper(wrapped, function)
+        wrapped.prepare = partial(prepare, self)
         return register_file_move_collision_processor(wrapped)
 
     def register_file_pre_save_processor(
