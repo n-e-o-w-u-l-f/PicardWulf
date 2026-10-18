@@ -647,18 +647,29 @@ class SafeStagedFlacImport(BaseAction):
                   'Import konnte nicht gestartet werden; keine Erfolgsmeldung.', 'warning')
 
 
-def _native_move_collision(api, old_filename, new_filename, settings, destination_loaded):
-    """Patched Picard 3.0.2 public core hook; called ONLY on save worker.
+def _native_move_prepare(api):
+    """GUI-thread snapshot: background workers must never read ProfileConfig."""
+    config = api.plugin_config
+    return (bool(config.get('native_move_auto', False)),
+            str(config.get('native_recovery_root', '')))
 
-    No access to Qt, Picard File, Tagger or mutable metadata on this thread.
-    Unpatched stock Picard does not register or invoke this function.
+
+def _native_move_collision(api, old_filename, new_filename, settings,
+                           destination_loaded, frozen_policy):
+    """Patched Picard 3.0.2 move-worker hook; only immutable values are read.
+
+    Do not dereference api, Picard File, Tagger, Qt or ProfileConfig here.
+    The public core extension captures frozen_policy on the GUI thread.
     """
-    if not api.plugin_config.get('native_move_auto', False):
+    if (not isinstance(frozen_policy, tuple)
+            or len(frozen_policy) != 2):
+        return {'action': 'KEEP', 'reason': 'missing_native_policy_snapshot'}
+    enabled, recovery_root = frozen_policy
+    if not enabled:
         return {'action': 'UNHANDLED'}
     from .native_move_bridge import arbitrate_native_flac_move
     return arbitrate_native_flac_move(
-        old_filename, new_filename, settings,
-        api.plugin_config.get('native_recovery_root', ''),
+        old_filename, new_filename, settings, recovery_root,
         destination_loaded=destination_loaded,
     )
 
@@ -812,7 +823,8 @@ def enable(api):
     # This extension exists ONLY in the separately reviewed, locally built
     # Picard 3.0.2 core patch; stock Picard lacks it. Default is OFF.
     if hasattr(api, 'register_file_move_collision_processor'):
-        api.register_file_move_collision_processor(_native_move_collision)
+        api.register_file_move_collision_processor(
+            _native_move_collision, _native_move_prepare)
     try:
         _controller = AutoApplyController(api, _aggregator, _file_snapshot,
                                           ingest_snapshot_func=_original_file_snapshot,
