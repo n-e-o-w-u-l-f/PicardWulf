@@ -178,7 +178,7 @@ class NativePicard302CoreTest(unittest.TestCase):
                 f.setnchannels(1)
                 f.setsampwidth(2)
                 f.setframerate(22050)
-                f.writeframes(b"\\x00\\x00"*22050)
+                f.writeframes(b"\x00\x00"*22050)
             src=staging/"Track.flac"; dest=library/"Track.flac"
             subprocess.run(["flac","-f","--silent","-o",str(src),str(wav)],
                            check=True,capture_output=True)
