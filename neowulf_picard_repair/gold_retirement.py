@@ -21,6 +21,11 @@ def native_gold_retirement_allowed(api):
     Do not silently change the owner\'s Picard.ini or active naming preset.
     """
     try:
+        # A native staged FLAC copy deliberately keeps Picard's File bound
+        # to staging. Until canonical-library + Qt acceptance is proven,
+        # it must not trigger Gold UI retirement based on the staging copy.
+        if api.plugin_config.get("native_move_auto", False):
+            return False
         return api.global_config.setting["remove_complete_albums_after_save"] is False
     except (AttributeError, KeyError, TypeError, ValueError):
         return False
