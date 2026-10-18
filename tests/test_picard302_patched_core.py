@@ -31,9 +31,16 @@ class NativePicard302CoreTest(unittest.TestCase):
             raise AssertionError("native _rename method missing")
         method=copy.deepcopy(rename[0])
         method.decorator_list=[]
+        save_worker=[node for node in found[0].body
+                     if isinstance(node,ast.FunctionDef)
+                     and node.name=="_save_and_rename"]
+        if len(save_worker)!=1:
+            raise AssertionError("native save worker missing")
+        save_worker=copy.deepcopy(save_worker[0])
+        save_worker.decorator_list=[]
         harness=ast.ClassDef(
             name="Harness", bases=[], keywords=[],
-            body=[method],decorator_list=[])
+            body=[method,save_worker],decorator_list=[])
         ast.fix_missing_locations(harness)
         module=ast.Module(body=[harness],type_ignores=[])
         cls.code=compile(module,"<real-patched-Picard-3.0.2-file.py>","exec")
@@ -46,11 +53,24 @@ class NativePicard302CoreTest(unittest.TestCase):
                 functions=callbacks),
             "log":types.SimpleNamespace(debug=lambda *args:None),
             "get_available_filename":lambda dst,src:dst,
+            "File":types.SimpleNamespace(State=types.SimpleNamespace(
+                REMOVED="removed")),
+            "PICARD_APP_NAME":"Picard",
+            "get_config":lambda:types.SimpleNamespace(setting={
+                "enable_tag_saving":False,"rename_files":True,
+                "move_files":True,"move_overwrite_existing_files":False,
+                "delete_empty_dirs":False,"save_images_to_files":False,
+                "move_additional_files":True,
+            }),
         }
         exec(self.code,namespace)
         instance=namespace["Harness"]()
         instance.make_filename=lambda old,metadata,settings:str(new_target)
         instance.moves=[]
+        instance.sidecars=[]
+        instance._move_additional_files=lambda *args:instance.sidecars.append(args)
+        instance.state="normal"
+        instance.tagger=types.SimpleNamespace(stopping=False)
         def move(old,new):
             instance.moves.append((old,new))
             Path(new).write_bytes(Path(old).read_bytes())
@@ -107,6 +127,24 @@ class NativePicard302CoreTest(unittest.TestCase):
             file=self.setup_native([lambda *args:{"action":"UNHANDLED"}],dst)
             self.assertEqual(file._rename(str(src),{},self.settings()),str(dst))
             self.assertEqual(len(file.moves),1)
+
+    def test_native_worker_safe_copy_keeps_staging_companion_files(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            src=root/"staging.flac"; dst=root/"library.flac"
+            companion=root/"cover.jpg"
+            src.write_bytes(b"verified")
+            companion.write_bytes(b"cover")
+            def handler(old,new,settings,loaded):
+                Path(new).write_bytes(Path(old).read_bytes())
+                return {"action":"COMMITTED","destination":new}
+            file=self.setup_native([handler],dst)
+            result=file._save_and_rename(str(src),{},False)
+            self.assertEqual(result,str(dst))
+            self.assertEqual(dst.read_bytes(),src.read_bytes())
+            self.assertEqual(companion.read_bytes(),b"cover")
+            self.assertEqual(file.sidecars,[])
+            self.assertEqual(file.moves,[])
 
     def test_native_core_bad_receipt_refuses_unverified_commit(self):
         with tempfile.TemporaryDirectory() as d:
