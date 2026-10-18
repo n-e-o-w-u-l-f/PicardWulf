@@ -44,12 +44,12 @@
 +        # Source-preserving native FLAC copy must not relocate companion
 +        # files from the staging directory. The original native MOVE still
 +        # removes its source and keeps Picard's original sidecar behavior.
-+        if new_filename == old_filename or not os.path.exists(old_filename):
++        if new_filename != old_filename and not os.path.exists(old_filename):
 +            self._move_additional_files(old_filename, new_filename, config)
          # Delete empty directories
          if config.setting['delete_empty_dirs']:
              dirname = os.path.dirname(old_filename)
-@@ -797,10 +811,35 @@
+@@ -797,10 +811,42 @@
          new_path = os.path.join(new_dirname, new_filename)
          return normpath(new_path, realpath=False)
  
@@ -78,15 +78,22 @@
 +                    return old_filename
 +                if action == 'COMMITTED':
 +                    if (decision.get('destination') != new_filename
-+                            or not os.path.isfile(new_filename)):
-+                        raise RuntimeError('Native FLAC destination not verified')
-+                    return new_filename
++                            or not os.path.isfile(new_filename)
++                            or decision.get('source_preserved') != old_filename):
++                        raise RuntimeError('Native FLAC copy receipt not verified')
++                    # A verified COPY is NOT a rename. The source still
++                    # exists and owns this Picard File. Returning the target
++                    # would cause _saving_finished to steal tagger.files at
++                    # the destination, possibly overwriting a second File
++                    # loaded after save was queued. Preserve source identity;
++                    # the canonical library copy can be loaded independently.
++                    return old_filename
 +                if action != 'UNHANDLED':
 +                    raise RuntimeError('Unexpected native FLAC collision decision')
  
          new_dirname = os.path.dirname(new_filename)
          os.makedirs(new_dirname, exist_ok=True)
-@@ -1394,6 +1433,7 @@
+@@ -1394,6 +1440,7 @@
  file_post_removal_to_track_processors = PluginFunctions[['Track', File], None](
      label='file_post_removal_from_track_processors'
  )
