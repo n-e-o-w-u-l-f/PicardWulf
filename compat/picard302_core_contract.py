@@ -283,4 +283,7 @@ def read_checkout(root: Path) -> dict[str, str]:
 def write_checkout_patch(root: Path, patch_out: Path) -> None:
     """Produce a reviewable patch. NEVER apply it to a live installation."""
     patch_out = Path(patch_out)
-    patch_out.write_text(unified_patch(read_checkout(root)), encoding='utf-8')
+    # Path.write_text() performs Windows newline translation (LF -> CRLF),
+    # corrupting the unified diff even when upstream Git blobs match.
+    # Git apply needs precisely the same LF bytes on Windows and Linux.
+    patch_out.write_bytes(unified_patch(read_checkout(root)).encode('utf-8'))
