@@ -60,23 +60,57 @@ def patch_sources(source: dict[str, str]) -> dict[str, str]:
             policies = tuple(file_move_collision_processors.functions)
             if len(policies) == 1 and callable(getattr(policies[0], 'prepare', None)):
                 collision_policy_context = policies[0].prepare()
+        # Pin the native rename, destination and overwrite plan on the GUI
+        # thread. Plugin settings alone cannot guarantee this; Picard
+        # re-reads the active naming profile in its asynchronous worker.
+        collision_native_plan = None
+        if (isinstance(collision_policy_context, tuple)
+                and len(collision_policy_context) == 2
+                and collision_policy_context[0] is True
+                and self.filename.lower().endswith('.flac')):
+            settings = get_config().setting
+            collision_native_plan = (
+                self.make_filename(self.filename, metadata, settings),
+                settings['rename_files'], settings['move_files'],
+                settings['move_files_to'],
+                settings['move_overwrite_existing_files'],
+            )
         # Track in-flight saves""",
         "file.save loaded target")
     file = _replace_once(
         file,
         "partial(self._save_and_rename, self.filename, metadata),",
-        "partial(self._save_and_rename, self.filename, metadata, collision_target_loaded, collision_policy_context),",
+        "partial(self._save_and_rename, self.filename, metadata, collision_target_loaded, collision_policy_context, collision_native_plan),",
         "file.save worker args")
     file = _replace_once(
         file,
         "    def _save_and_rename(self, old_filename, metadata):",
-        "    def _save_and_rename(self, old_filename, metadata, collision_target_loaded=False, collision_policy_context=None):",
+        "    def _save_and_rename(self, old_filename, metadata, collision_target_loaded=False, collision_policy_context=None, collision_native_plan=None):",
         "save worker signature")
     file = _replace_once(
         file,
         "self._rename(old_filename, metadata, config.setting)",
-        "self._rename(old_filename, metadata, config.setting, collision_target_loaded, collision_policy_context)",
+        "self._rename(old_filename, metadata, config.setting, collision_target_loaded, collision_policy_context, collision_native_plan)",
         "save worker rename call")
+    file = _replace_once(
+        file,
+        """        config = get_config()
+        # Check that file has not been removed since thread was queued""",
+        """        config = get_config()
+        # Compare the target BEFORE writing any tags to the source.
+        if collision_native_plan is not None:
+            active_settings = config.setting
+            native_now = (
+                self.make_filename(old_filename, metadata, active_settings),
+                active_settings['rename_files'], active_settings['move_files'],
+                active_settings['move_files_to'],
+                active_settings['move_overwrite_existing_files'],
+            )
+            if native_now != collision_native_plan:
+                raise RuntimeError(
+                    'PicardWulf: native FLAC target/profile changed before tag save')
+        # Check that file has not been removed since thread was queued""",
+        "native save plan check before tag write")
     file = _replace_once(
         file,
         "        self._move_additional_files(old_filename, new_filename, config)",
@@ -89,8 +123,25 @@ def patch_sources(source: dict[str, str]) -> dict[str, str]:
     file = _replace_once(
         file,
         "    def _rename(self, old_filename, metadata, settings):",
-        "    def _rename(self, old_filename, metadata, settings, destination_loaded=False, collision_policy_context=None):",
+        "    def _rename(self, old_filename, metadata, settings, destination_loaded=False, collision_policy_context=None, collision_native_plan=None):",
         "rename policy signature")
+    file = _replace_once(
+        file,
+        """        new_filename = self.make_filename(old_filename, metadata, settings)
+        if old_filename == new_filename:""",
+        """        new_filename = self.make_filename(old_filename, metadata, settings)
+        if collision_native_plan is not None:
+            native_now = (
+                new_filename,
+                settings['rename_files'], settings['move_files'],
+                settings['move_files_to'],
+                settings['move_overwrite_existing_files'],
+            )
+            if native_now != collision_native_plan:
+                raise RuntimeError(
+                    'PicardWulf: native FLAC target/profile changed during tag save')
+        if old_filename == new_filename:""",
+        "native save plan check immediately before move")
     file = _replace_once(
         file,
         """        new_dirname = os.path.dirname(new_filename)
