@@ -32,7 +32,7 @@ if ($picardRunning) {
     }
 }
 $source = Join-Path $PSScriptRoot 'neowulf_picard_repair'
-$required = @('__init__.py', 'MANIFEST.toml', 'repair_logic.py', 'universal_engine.py', 'universal_adapters.py', 'credentials.py', 'native_workflow.py', 'native_ui.py', 'auto_selection.py', 'auto_apply.py', 'background_io.py', 'provider_policy.py', 'save_tracking.py', 'cluster_matching.py', 'cluster_ui.py', 'gold_retirement.py', 'collision_preview.py', 'retention_policy.py', 'staged_flac_import.py', 'picard_safe_import.py')
+$required = @('__init__.py', 'MANIFEST.toml', 'repair_logic.py', 'universal_engine.py', 'universal_adapters.py', 'credentials.py', 'native_workflow.py', 'native_ui.py', 'auto_selection.py', 'auto_apply.py', 'background_io.py', 'provider_policy.py', 'save_tracking.py', 'cluster_matching.py', 'cluster_ui.py', 'gold_retirement.py', 'collision_preview.py', 'retention_policy.py', 'staged_flac_import.py', 'picard_safe_import.py', 'native_move_bridge.py')
 foreach ($item in $required) {
     if (!(Test-Path -LiteralPath (Join-Path $source $item) -PathType Leaf)) {
         Stop-Install "Paket unvollstaendig: $item"
