@@ -108,9 +108,16 @@ def patch_sources(source: dict[str, str]) -> dict[str, str]:
                     return old_filename
                 if action == 'COMMITTED':
                     if (decision.get('destination') != new_filename
-                            or not os.path.isfile(new_filename)):
-                        raise RuntimeError('Native FLAC destination not verified')
-                    return new_filename
+                            or not os.path.isfile(new_filename)
+                            or decision.get('source_preserved') != old_filename):
+                        raise RuntimeError('Native FLAC copy receipt not verified')
+                    # A verified COPY is NOT a rename. The source still
+                    # exists and owns this Picard File. Returning the target
+                    # would cause _saving_finished to steal tagger.files at
+                    # the destination, possibly overwriting a second File
+                    # loaded after save was queued. Preserve source identity;
+                    # the canonical library copy can be loaded independently.
+                    return old_filename
                 if action != 'UNHANDLED':
                     raise RuntimeError('Unexpected native FLAC collision decision')
 
