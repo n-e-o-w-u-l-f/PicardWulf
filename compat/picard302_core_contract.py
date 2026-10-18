@@ -8,6 +8,7 @@ The user's live Picard installation and music are never touched.
 from __future__ import annotations
 
 from difflib import unified_diff
+from hashlib import sha1
 from pathlib import Path
 
 SOURCES = (
@@ -15,6 +16,14 @@ SOURCES = (
     "picard/extension_points/event_hooks.py",
     "picard/plugin3/api_impl.py",
 )
+
+# Exact Git blob identities of official upstream release-3.0.2.
+# Do not carry this invasive source patch silently across Picard upgrades.
+UPSTREAM_BLOBS = {
+    "picard/file.py": "9a710034b25e8bcb5f15b22530cf6687b9c3349e",
+    "picard/extension_points/event_hooks.py": "4c36ba04283712d247464819026a14880f3fb601",
+    "picard/plugin3/api_impl.py": "9d9ee6214bd46c2cabb431f78947fba34c5c88dc",
+}
 
 
 def _replace_once(source: str, before: str, after: str, name: str) -> str:
@@ -190,7 +199,14 @@ def unified_patch(source: dict[str, str]) -> str:
 
 def read_checkout(root: Path) -> dict[str, str]:
     root = Path(root)
-    return {path: (root/path).read_text(encoding='utf-8') for path in SOURCES}
+    sources = {path: (root/path).read_bytes() for path in SOURCES}
+    for path, payload in sources.items():
+        git_blob = b"blob " + str(len(payload)).encode("ascii") + b"\\x00" + payload
+        actual = sha1(git_blob).hexdigest()
+        if actual != UPSTREAM_BLOBS[path]:
+            raise RuntimeError(
+                f"Refusing unverified Picard 3.0.2 source {path}: {actual}")
+    return {path: payload.decode("utf-8") for path, payload in sources.items()}
 
 
 def write_checkout_patch(root: Path, patch_out: Path) -> None:
