@@ -647,6 +647,82 @@ class SafeStagedFlacImport(BaseAction):
                   'Import konnte nicht gestartet werden; keine Erfolgsmeldung.', 'warning')
 
 
+def _native_move_collision(api, old_filename, new_filename, settings, destination_loaded):
+    """Patched Picard 3.0.2 public core hook; called ONLY on save worker.
+
+    No access to Qt, Picard File, Tagger or mutable metadata on this thread.
+    Unpatched stock Picard does not register or invoke this function.
+    """
+    if not api.plugin_config.get('native_move_auto', False):
+        return {'action': 'UNHANDLED'}
+    from .native_move_bridge import arbitrate_native_flac_move
+    return arbitrate_native_flac_move(
+        old_filename, new_filename, settings,
+        api.plugin_config.get('native_recovery_root', ''),
+        destination_loaded=destination_loaded,
+    )
+
+
+class NativeMoveSafetyToggle(BaseAction):
+    TITLE = 'Native FLAC-Kollision (nur geprüfter Picard-Core-Build)'
+    MENU = ('PicardWulf',)
+
+    def callback(self, objs):
+        cfg = self.api.plugin_config
+        if cfg.get('native_move_auto', False):
+            cfg['native_move_auto'] = False
+            _show('PicardWulf – Native FLAC-Kollision',
+                  'Native Kollisionsintegration AUS. Standard-Picard-Verhalten aktiv.')
+            return
+        if not hasattr(self.api, 'register_file_move_collision_processor'):
+            _show('PicardWulf – Native FLAC-Kollision',
+                  'Der installierte Picard-Core bietet keine native '
+                  'Kollisionsschnittstelle. Keine Aktivierung, keine '
+                  'Datei- oder Profileinstellungen verändert.', 'warning')
+            return
+        from PyQt6.QtWidgets import QFileDialog
+        recovery = QFileDialog.getExistingDirectory(
+            getattr(self.api.tagger, 'window', None),
+            'Separaten Ordner für unveränderliche FLAC-Sicherungen wählen')
+        if not recovery:
+            return
+        folder = Path(recovery)
+        if not folder.is_dir() or folder.is_symlink():
+            _show('PicardWulf', 'Ungeprüfter Sicherungsordner.', 'warning')
+            return
+        settings = self.api.global_config.setting
+        try:
+            library = Path(settings['move_files_to'])
+            if (settings['move_files'] is not True
+                    or settings['move_overwrite_existing_files'] is not False
+                    or not library.is_absolute() or not library.is_dir()
+                    or folder.resolve().is_relative_to(library.resolve())
+                    or library.resolve().is_relative_to(folder.resolve())):
+                raise ValueError('unsafe_root')
+        except (ValueError, KeyError, TypeError, OSError):
+            _show('PicardWulf', 'Musikbibliothek und Sicherungen müssen '
+                  'getrennte absolute Verzeichnisse sein; natives Überschreiben '
+                  'muss AUS sein.', 'warning')
+            return
+        msg = ('Native Picard-Core-Kollisionsentscheidung NUR in einem '
+               'isolierten, mit realen FLAC-Testdateien geprüften '
+               'Picard-3.0.2-Testprofil aktivieren?\n\n'
+               'Bei identischem FLAC gewinnt die nach Tags/Decoder und '
+               'SHA-256 bestätigte größere Datei. Unklare Fälle behalten '
+               'die geladene Quelle. Original und Backup bleiben erhalten. '
+               'Diese Funktion darf NICHT ungeprüft auf Ihre aktive '
+               'Musikbibliothek angewandt werden.')
+        if QMessageBox.question(
+            None, 'PicardWulf – Native Kollisionsintegration', msg,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
+            cfg['native_recovery_root'] = str(folder)
+            cfg['native_move_auto'] = True
+            _show('PicardWulf', 'Native Kollisionsintegration im '
+                  'PicardWulf-Testprofil aktiviert. Kein globales '
+                  'Picard-Speicherprofil verändert.')
+
+
 class AutoApplyToggle(BaseAction):
     TITLE = 'Automatische Release-Auswahl ein-/ausschalten'
     MENU = ('PicardWulf',)
@@ -711,6 +787,8 @@ def enable(api):
     api.register_album_metadata_processor(_album_guard, priority=-1000)
     api.plugin_config.register_option('auto_apply_best', True)
     api.plugin_config.register_option('auto_save_with_backup', False)
+    api.plugin_config.register_option('native_move_auto', False)
+    api.plugin_config.register_option('native_recovery_root', '')
     api.plugin_config.register_option('flac_only_cleanup', True)
     api.plugin_config.register_option('gold_auto_retire', True)
     api.plugin_config.register_option('search_paused', False)
@@ -731,6 +809,10 @@ def enable(api):
     _save_tracker=SaveTracker(on_verified=(_retire_mp3_after_verified_flac if
         api.plugin_config.get('flac_only_cleanup',True) else None))
     api.register_file_post_save_processor(_file_saved)
+    # This extension exists ONLY in the separately reviewed, locally built
+    # Picard 3.0.2 core patch; stock Picard lacks it. Default is OFF.
+    if hasattr(api, 'register_file_move_collision_processor'):
+        api.register_file_move_collision_processor(_native_move_collision)
     try:
         _controller = AutoApplyController(api, _aggregator, _file_snapshot,
                                           ingest_snapshot_func=_original_file_snapshot,
@@ -770,6 +852,7 @@ def enable(api):
     api.register_file_action(SafeStagedFlacImport)
     api.register_tools_menu_action(AutoApplyToggle)
     api.register_tools_menu_action(AutoSaveToggle)
+    api.register_tools_menu_action(NativeMoveSafetyToggle)
 
 
 def disable():
