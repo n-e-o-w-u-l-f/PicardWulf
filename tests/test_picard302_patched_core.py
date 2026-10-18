@@ -45,9 +45,15 @@ class NativePicard302CoreTest(unittest.TestCase):
             raise AssertionError("native Qt save-finished function missing")
         save_finish=copy.deepcopy(save_finish[0])
         save_finish.decorator_list=[]
+        save_method=[node for node in found[0].body
+                     if isinstance(node,ast.FunctionDef) and node.name=="save"]
+        if len(save_method)!=1:
+            raise AssertionError("native Picard File.save method missing")
+        save_method=copy.deepcopy(save_method[0])
+        save_method.decorator_list=[]
         harness=ast.ClassDef(
             name="Harness", bases=[], keywords=[],
-            body=[method,save_worker,save_finish],decorator_list=[])
+            body=[method,save_worker,save_finish,save_method],decorator_list=[])
         ast.fix_missing_locations(harness)
         module=ast.Module(body=[harness],type_ignores=[])
         cls.code=compile(module,"<real-patched-Picard-3.0.2-file.py>","exec")
@@ -223,6 +229,74 @@ class NativePicard302CoreTest(unittest.TestCase):
             backups=[p for p in recovery.iterdir() if p.is_file()]
             self.assertEqual(len(backups),1)
             self.assertEqual(backups[0].read_bytes(),older)
+
+    def test_real_file_save_freezes_policy_before_background_worker(self):
+        """Actual upstream File.save must snapshot configuration before queue."""
+        import functools
+        import os
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            src=root/"staging.flac"; dst=root/"library.flac"
+            src.write_bytes(b"synthetic FLAC bytes for scheduler test")
+            live_policy=[True,"/recovery/A"]
+            seen=[]
+            queued=[]
+            class Processor:
+                def prepare(self):
+                    return tuple(live_policy)
+                def __call__(self,old,new,settings,loaded,policy):
+                    seen.append(policy)
+                    return {"action":"KEEP"}
+            processor=Processor()
+            class Metadata(dict):
+                def copy(self,other):
+                    self.clear()
+                    self.update(other)
+            namespace={
+                "os":os,
+                "file_move_collision_processors":types.SimpleNamespace(
+                    functions=[processor]),
+                "log":types.SimpleNamespace(debug=lambda *args:None),
+                "get_available_filename":lambda dest,source:dest,
+                "File":types.SimpleNamespace(State=types.SimpleNamespace(
+                    REMOVED="removed")),
+                "PICARD_APP_NAME":"Picard",
+                "Metadata":Metadata,
+                "IS_WIN":False,
+                "run_file_pre_save_processors":lambda *args:None,
+                "partial":functools.partial,
+                "thread":types.SimpleNamespace(
+                    run_task=lambda worker,completion,thread_pool=None:
+                        queued.append((worker,completion))),
+                "get_config":lambda:types.SimpleNamespace(setting={
+                    "rename_files":True,
+                    "move_files":True,
+                    "enable_tag_saving":False,
+                    "move_overwrite_existing_files":False,
+                    "delete_empty_dirs":False,
+                    "save_images_to_files":False,
+                    "move_additional_files":False,
+                }),
+            }
+            exec(self.code,namespace)
+            file=namespace["Harness"]()
+            file.filename=str(src)
+            file.metadata=Metadata(title="Staged")
+            file.make_filename=lambda source,metadata,settings:str(dst)
+            file.set_pending=lambda:None
+            file.tagger=types.SimpleNamespace(
+                _saving_files_count=0, stopping=False,
+                files={str(src):file},save_thread_pool=object())
+            file.save()
+            self.assertEqual(len(queued),1)
+            self.assertEqual(file.tagger._saving_files_count,1)
+            live_policy[:]=[False,"/recovery/B"]
+            # Run queued worker AFTER user changes UI plugin settings.
+            completed=queued[0][0]()
+            self.assertEqual(completed,str(src))
+            self.assertEqual(seen,[(True,"/recovery/A")])
+            self.assertTrue(src.exists())
+            self.assertFalse(dst.exists())
 
     def test_actual_picard_saving_finished_preserves_second_loaded_file(self):
         class Meta(dict):
