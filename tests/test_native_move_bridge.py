@@ -131,6 +131,53 @@ class NativeMoveBridgeTests(unittest.TestCase):
                 bridge.arbitrate_native_flac_move(
                     src,dst,settings,backup,import_fn=fake_commit)
 
+    def test_concurrent_native_saves_lock_same_canonical_target(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Event, current_thread
+        with tempfile.TemporaryDirectory() as tmp:
+            src,target,recovery,settings,_=self.roots(tmp)
+            other=src.parent/"Second.flac"
+            other.write_bytes(b"Q"*75)
+            original=target.read_bytes()
+            lock_held=Event()
+            release=Event()
+            def blocked_inspect(path):
+                # This occurs under _target_lock, after the first source
+                # preflight. Delay the first worker while it owns the lock.
+                if (Path(path)==target
+                        and current_thread().name=="First"):
+                    lock_held.set()
+                    if not release.wait(timeout=6):
+                        raise AssertionError("Test lock timeout")
+                return fake_inspect(path)
+            def import_fn(source,destination,**kw):
+                return importer.import_staged_flac(
+                    source,destination,**kw,inspect=blocked_inspect,
+                    decode=lambda file:True)
+            import threading
+            def first_job():
+                threading.current_thread().name="First"
+                return bridge.arbitrate_native_flac_move(
+                    src,target,settings,recovery,import_fn=import_fn)
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                first=pool.submit(first_job)
+                self.assertTrue(lock_held.wait(timeout=6))
+                try:
+                    second=pool.submit(
+                        lambda:bridge.arbitrate_native_flac_move(
+                            other,target,settings,recovery,import_fn=import_fn))
+                    with self.assertRaisesRegex(
+                            importer.StagedImportRejected,"already locked"):
+                        second.result(timeout=6)
+                finally:
+                    release.set()
+                out=first.result(timeout=6)
+            self.assertEqual(out["action"],"COMMITTED")
+            self.assertEqual(target.read_bytes(),src.read_bytes())
+            self.assertEqual(Path(out["backup"]).read_bytes(),original)
+            self.assertEqual(other.read_bytes(),b"Q"*75)
+            self.assertFalse(any(p.suffix==".lock" for p in recovery.iterdir()))
+
     def test_missing_recovery_root_refuses_even_free_destination(self):
         with tempfile.TemporaryDirectory() as tmp:
             src,dst,backup,settings,move=self.roots(tmp,existing=None)
