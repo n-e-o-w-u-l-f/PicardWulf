@@ -111,7 +111,7 @@ class NativePicard302CoreTest(unittest.TestCase):
             root=Path(d)
             src=root/"source.flac"; dst=root/"library.flac"
             src.write_bytes(b"large")
-            def handler(old,new,settings,loaded):
+            def handler(old,new,settings,loaded,policy):
                 self.assertFalse(loaded)
                 Path(new).write_bytes(Path(old).read_bytes())
                 return {"action":"COMMITTED","destination":new,
@@ -148,7 +148,7 @@ class NativePicard302CoreTest(unittest.TestCase):
             companion=root/"cover.jpg"
             src.write_bytes(b"verified")
             companion.write_bytes(b"cover")
-            def handler(old,new,settings,loaded):
+            def handler(old,new,settings,loaded,policy):
                 Path(new).write_bytes(Path(old).read_bytes())
                 return {"action":"COMMITTED","destination":new,
                         "source_preserved":old}
@@ -209,7 +209,7 @@ class NativePicard302CoreTest(unittest.TestCase):
             tags.save()
             self.assertGreater(src.stat().st_size,dest.stat().st_size)
             companion=staging/"cover.jpg"; companion.write_bytes(b"cover")
-            def collision(old,new,settings,loaded):
+            def collision(old,new,settings,loaded,policy):
                 return bridge.arbitrate_native_flac_move(
                     old,new,settings,recovery,destination_loaded=loaded)
             file=self.setup_native([collision],dest)
@@ -269,7 +269,7 @@ class NativePicard302CoreTest(unittest.TestCase):
             src.write_bytes(b"verified source")
             other_owner=object()
             loaded={str(src):"source File",str(dst):other_owner}
-            def handler(old,new,settings,loaded_at_start):
+            def handler(old,new,settings,loaded_at_start,policy):
                 self.assertFalse(loaded_at_start)
                 Path(new).write_bytes(Path(old).read_bytes())
                 return {"action":"COMMITTED","destination":new,
