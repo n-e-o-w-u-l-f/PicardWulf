@@ -38,9 +38,16 @@ class NativePicard302CoreTest(unittest.TestCase):
             raise AssertionError("native save worker missing")
         save_worker=copy.deepcopy(save_worker[0])
         save_worker.decorator_list=[]
+        save_finish=[node for node in found[0].body
+                     if isinstance(node,ast.FunctionDef)
+                     and node.name=="_saving_finished"]
+        if len(save_finish)!=1:
+            raise AssertionError("native Qt save-finished function missing")
+        save_finish=copy.deepcopy(save_finish[0])
+        save_finish.decorator_list=[]
         harness=ast.ClassDef(
             name="Harness", bases=[], keywords=[],
-            body=[method,save_worker],decorator_list=[])
+            body=[method,save_worker,save_finish],decorator_list=[])
         ast.fix_missing_locations(harness)
         module=ast.Module(body=[harness],type_ignores=[])
         cls.code=compile(module,"<real-patched-Picard-3.0.2-file.py>","exec")
@@ -56,12 +63,16 @@ class NativePicard302CoreTest(unittest.TestCase):
             "File":types.SimpleNamespace(State=types.SimpleNamespace(
                 REMOVED="removed")),
             "PICARD_APP_NAME":"Picard",
+            "resolve_fs_path":lambda p:p,
+            "FileIdentity":lambda path:("FileIdentity",path),
+            "format_time":str,
+            "run_file_post_save_processors":lambda file:None,
             "get_config":lambda:types.SimpleNamespace(setting={
                 "enable_tag_saving":False,"rename_files":True,
                 "move_files":True,"move_overwrite_existing_files":False,
                 "move_files_to":str(Path(new_target).parent),
                 "delete_empty_dirs":False,"save_images_to_files":False,
-                "move_additional_files":True,
+                "move_additional_files":True,"clear_existing_tags":False,
             }),
         }
         exec(self.code,namespace)
@@ -212,6 +223,41 @@ class NativePicard302CoreTest(unittest.TestCase):
             backups=[p for p in recovery.iterdir() if p.is_file()]
             self.assertEqual(len(backups),1)
             self.assertEqual(backups[0].read_bytes(),older)
+
+    def test_actual_picard_saving_finished_preserves_second_loaded_file(self):
+        class Meta(dict):
+            length=220000
+            images=()
+            def clear_deleted(self):
+                pass
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            src=root/"staging.flac"; dst=root/"library.flac"
+            src.write_bytes(b"source audio")
+            owner=object()
+            file=self.setup_native([],dst)
+            file.filename=str(src)
+            file.orig_metadata=Meta({"title":"Song"})
+            file.metadata=Meta({"title":"Song"})
+            file._copy_file_info_tags=lambda *args:None
+            file._expected_embedded_images=lambda:()
+            file._format_specific_copy=lambda metadata,settings:Meta(metadata)
+            file._update_filesystem_metadata=lambda *args:None
+            file.clear_errors=lambda:None
+            file.clear_pending=lambda **kwargs:None
+            file.update=lambda **kwargs:None
+            file.tagger=types.SimpleNamespace(
+                _saving_files_count=1,
+                stopping=False,
+                files={str(src):file,str(dst):owner},
+                flush_saving_image_parents=lambda:None)
+            # The actual unmodified upstream _saving_finished computes
+            # File.filename and updates Tagger's indexed file map.
+            file._saving_finished(result=str(src))
+            self.assertEqual(file.filename,str(src))
+            self.assertIs(file.tagger.files[str(src)],file)
+            self.assertIs(file.tagger.files[str(dst)],owner)
+            self.assertEqual(file.tagger._saving_files_count,0)
 
     def test_late_loaded_canonical_owner_is_not_overwritten_by_copy(self):
         # A second File can be loaded while native saving is asynchronous.
