@@ -93,6 +93,7 @@ class NativeSavePlanDriftTests(unittest.TestCase):
         obj.make_filename=lambda filename,metadata,settings: str(
             library/settings["test_naming"]/"Music.flac")
         obj.set_pending=lambda:None
+        obj._saving_finished=lambda *args,**kwargs:None
         obj.tagger=types.SimpleNamespace(
             stopping=False,
             _saving_files_count=0,
@@ -155,7 +156,7 @@ class NativeSavePlanDriftTests(unittest.TestCase):
                 settings["test_naming"]="Other Album"
                 src.write_bytes(b"TAGGED_SOURCE")
             # Obtain the bound object without executing the worker.
-            native_file=worker.args[0]
+            native_file=worker.func.__self__
             native_file._save=tag_then_change
             with self.assertRaisesRegex(RuntimeError,"during tag save"):
                 worker()
