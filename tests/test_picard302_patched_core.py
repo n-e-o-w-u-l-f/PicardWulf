@@ -103,10 +103,11 @@ class NativePicard302CoreTest(unittest.TestCase):
             def handler(old,new,settings,loaded):
                 self.assertFalse(loaded)
                 Path(new).write_bytes(Path(old).read_bytes())
-                return {"action":"COMMITTED","destination":new}
+                return {"action":"COMMITTED","destination":new,
+                        "source_preserved":old}
             file=self.setup_native([handler],dst)
             result=file._rename(str(src),{},self.settings(),False)
-            self.assertEqual(result,str(dst))
+            self.assertEqual(result,str(src))
             self.assertEqual(dst.read_bytes(),src.read_bytes())
             self.assertTrue(src.is_file())
             self.assertEqual(file.moves,[])
@@ -138,10 +139,11 @@ class NativePicard302CoreTest(unittest.TestCase):
             companion.write_bytes(b"cover")
             def handler(old,new,settings,loaded):
                 Path(new).write_bytes(Path(old).read_bytes())
-                return {"action":"COMMITTED","destination":new}
+                return {"action":"COMMITTED","destination":new,
+                        "source_preserved":old}
             file=self.setup_native([handler],dst)
             result=file._save_and_rename(str(src),{},False)
-            self.assertEqual(result,str(dst))
+            self.assertEqual(result,str(src))
             self.assertEqual(dst.read_bytes(),src.read_bytes())
             self.assertEqual(companion.read_bytes(),b"cover")
             self.assertEqual(file.sidecars,[])
@@ -201,7 +203,7 @@ class NativePicard302CoreTest(unittest.TestCase):
                     old,new,settings,recovery,destination_loaded=loaded)
             file=self.setup_native([collision],dest)
             result=file._save_and_rename(str(src),{},False)
-            self.assertEqual(result,str(dest))
+            self.assertEqual(result,str(src))
             self.assertEqual(dest.read_bytes(),src.read_bytes())
             self.assertTrue(src.exists())
             self.assertEqual(companion.read_bytes(),b"cover")
@@ -210,6 +212,44 @@ class NativePicard302CoreTest(unittest.TestCase):
             backups=[p for p in recovery.iterdir() if p.is_file()]
             self.assertEqual(len(backups),1)
             self.assertEqual(backups[0].read_bytes(),older)
+
+    def test_late_loaded_canonical_owner_is_not_overwritten_by_copy(self):
+        # A second File can be loaded while native saving is asynchronous.
+        # Returning source prevents _saving_finished from rewriting that
+        # other File's canonical registry entry.
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            src=root/"source.flac"; dst=root/"library.flac"
+            src.write_bytes(b"verified source")
+            other_owner=object()
+            loaded={str(src):"source File",str(dst):other_owner}
+            def handler(old,new,settings,loaded_at_start):
+                self.assertFalse(loaded_at_start)
+                Path(new).write_bytes(Path(old).read_bytes())
+                return {"action":"COMMITTED","destination":new,
+                        "source_preserved":old}
+            file=self.setup_native([handler],dst)
+            result=file._save_and_rename(str(src),{},False)
+            self.assertEqual(result,str(src))
+            loaded.pop(str(src))
+            loaded[result]="source File"
+            self.assertIs(loaded[str(dst)],other_owner)
+            self.assertEqual(loaded[str(src)],"source File")
+            self.assertEqual(dst.read_bytes(),src.read_bytes())
+
+    def test_committed_missing_preserved_source_receipt_is_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            src=root/"source.flac"; dst=root/"library.flac"
+            src.write_bytes(b"source")
+            def bad_handler(old,new,*other):
+                Path(new).write_bytes(Path(old).read_bytes())
+                return {"action":"COMMITTED","destination":new}
+            file=self.setup_native([bad_handler],dst)
+            with self.assertRaisesRegex(RuntimeError,"copy receipt"):
+                file._rename(str(src),{},self.settings())
+            self.assertEqual(file.moves,[])
+            self.assertTrue(src.is_file())
 
     def test_native_core_bad_receipt_refuses_unverified_commit(self):
         with tempfile.TemporaryDirectory() as d:
