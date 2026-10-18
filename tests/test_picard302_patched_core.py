@@ -281,6 +281,7 @@ class NativePicard302CoreTest(unittest.TestCase):
             exec(self.code,namespace)
             file=namespace["Harness"]()
             file.filename=str(src)
+            file.state="normal"
             file.metadata=Metadata(title="Staged")
             file.make_filename=lambda source,metadata,settings:str(dst)
             file.set_pending=lambda:None
