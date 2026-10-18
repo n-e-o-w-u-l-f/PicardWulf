@@ -72,7 +72,9 @@ class NativeSavePlanDriftTests(unittest.TestCase):
             "Metadata":Meta,
             "IS_WIN":False,
             "get_config":lambda:types.SimpleNamespace(setting=active),
-            "log":types.SimpleNamespace(debug=lambda *args:None),
+            "log":types.SimpleNamespace(debug=lambda *args:None,
+                                        warning=lambda *args,**kwargs:None),
+            "FileIdentity":lambda filename:None,
             "File":types.SimpleNamespace(
                 State=types.SimpleNamespace(REMOVED="removed")),
             "PICARD_APP_NAME":"Picard",
