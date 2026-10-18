@@ -26,6 +26,13 @@ class FakeMessageBox:
     def warning(cls, *args):
         cls.messages.append(('warn', args))
 widgets.QMessageBox = FakeMessageBox
+class FakeFolderPicker:
+    folder = ''
+    @classmethod
+    def getExistingDirectory(cls, *args):
+        return cls.folder
+widgets.QFileDialog = FakeFolderPicker
+
 qt.QtWidgets = widgets
 
 picard = types.ModuleType('picard')
@@ -86,6 +93,7 @@ class TestContract(unittest.TestCase):
     def setUp(self):
         FakeMessageBox.answer=FakeMessageBox.StandardButton.No
         FakeMessageBox.messages.clear()
+        FakeFolderPicker.folder = ''
     def test_enable_registers_no_mutations(self):
         api=Api()
         before=api.global_config.setting['file_renaming_scripts']['a']['script']
@@ -178,6 +186,63 @@ class TestContract(unittest.TestCase):
         # No real music touched. Enabling the feature is a separate user
         # confirmation and version-specific runtime acceptance.
         self.assertFalse(api.plugin_config['native_move_auto'])
+
+    def test_native_core_policy_opt_in_requires_separate_recovery(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root=pathlib.Path(tmp)
+            lib=root/'library'; recovery=root/'recovery'
+            lib.mkdir(); recovery.mkdir()
+            api=Api()
+            callbacks=[]
+            api.register_file_move_collision_processor=lambda fn:callbacks.append(fn)
+            api.global_config.setting.update({
+                'move_files':True,
+                'move_files_to':str(lib),
+                'move_overwrite_existing_files':False,
+            })
+            with patch.object(plugin,'AutoApplyController'),patch.object(plugin,'UniversalAggregator'):
+                plugin.enable(api)
+            self.assertEqual(callbacks,[plugin._native_move_collision])
+            FakeFolderPicker.folder=str(recovery)
+            FakeMessageBox.answer=FakeMessageBox.StandardButton.Yes
+            action=plugin.NativeMoveSafetyToggle()
+            action.api=api
+            action.callback([])
+            self.assertTrue(api.plugin_config['native_move_auto'])
+            self.assertEqual(api.plugin_config['native_recovery_root'],str(recovery))
+            from neowulf_picard_repair import native_move_bridge
+            with patch.object(native_move_bridge,'arbitrate_native_flac_move',
+                              return_value={'action':'KEEP'}) as bridge:
+                out=callbacks[0](api,'staging.flac','library.flac',{'move_files':True},True)
+            self.assertEqual(out,{'action':'KEEP'})
+            bridge.assert_called_once()
+            self.assertEqual(bridge.call_args.kwargs['destination_loaded'],True)
+            action.callback([])
+            self.assertFalse(api.plugin_config['native_move_auto'])
+            self.assertEqual(callbacks[0](api,'a.flac','b.flac',{},False),
+                             {'action':'UNHANDLED'})
+
+    def test_native_collision_opt_in_rejects_backup_nested_in_library(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            library=pathlib.Path(tmp)/'library'
+            recovery=library/'recovery'
+            recovery.mkdir(parents=True)
+            api=Api()
+            api.register_file_move_collision_processor=lambda fn:None
+            api.global_config.setting.update({
+                'move_files':True,
+                'move_files_to':str(library),
+                'move_overwrite_existing_files':False,
+            })
+            FakeFolderPicker.folder=str(recovery)
+            FakeMessageBox.answer=FakeMessageBox.StandardButton.Yes
+            action=plugin.NativeMoveSafetyToggle()
+            action.api=api
+            action.callback([])
+            self.assertFalse(api.plugin_config.get('native_move_auto',False))
+            self.assertTrue(any(kind=='warn' for kind,_ in FakeMessageBox.messages))
 
     def test_safe_import_file_action_dispatches_selected_files_and_tracker(self):
         api=Api()
