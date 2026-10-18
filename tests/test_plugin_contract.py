@@ -91,7 +91,7 @@ class TestContract(unittest.TestCase):
         before=api.global_config.setting['file_renaming_scripts']['a']['script']
         with patch.object(plugin,'AutoApplyController'), patch.object(plugin,'UniversalAggregator'):
             plugin.enable(api)
-        self.assertEqual(len(api.registered),22)
+        self.assertEqual(len(api.registered),23)
         self.assertEqual(len([x for x in api.registered if x[0]=='file_action']),3)
         self.assertEqual(sum(x[0]=='file_saved_event' for x in api.registered),1)
         self.assertTrue(api.plugin_config['auto_apply_best'])
@@ -152,6 +152,32 @@ class TestContract(unittest.TestCase):
         with patch.object(plugin._save_tracker,'post_save',return_value=True) as saved:
             events[0][1](api,witness)
         saved.assert_called_once_with(witness)
+
+    def test_native_core_policy_is_not_silently_enabled_in_stock_picard(self):
+        api=Api()
+        with patch.object(plugin,'AutoApplyController'), patch.object(plugin,'UniversalAggregator'):
+            plugin.enable(api)
+        self.assertFalse(api.plugin_config['native_move_auto'])
+        self.assertEqual(api.plugin_config['native_recovery_root'],'')
+        tool=plugin.NativeMoveSafetyToggle()
+        tool.api=api
+        tool.callback([])
+        self.assertFalse(api.plugin_config['native_move_auto'])
+        self.assertTrue(any(x[0]=='warn' for x in FakeMessageBox.messages))
+
+    def test_patched_picard_core_can_register_disabled_native_policy(self):
+        api=Api()
+        registered=[]
+        api.register_file_move_collision_processor=lambda fn:registered.append(fn)
+        with patch.object(plugin,'AutoApplyController'), patch.object(plugin,'UniversalAggregator'):
+            plugin.enable(api)
+        self.assertEqual(registered,[plugin._native_move_collision])
+        self.assertEqual(
+            registered[0](api,'x.flac','y.flac',{},False),
+            {'action':'UNHANDLED'})
+        # No real music touched. Enabling the feature is a separate user
+        # confirmation and version-specific runtime acceptance.
+        self.assertFalse(api.plugin_config['native_move_auto'])
 
     def test_safe_import_file_action_dispatches_selected_files_and_tracker(self):
         api=Api()
