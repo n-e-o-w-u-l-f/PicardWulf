@@ -176,12 +176,12 @@ class TestContract(unittest.TestCase):
     def test_patched_picard_core_can_register_disabled_native_policy(self):
         api=Api()
         registered=[]
-        api.register_file_move_collision_processor=lambda fn:registered.append(fn)
+        api.register_file_move_collision_processor=lambda fn,prepare:registered.append((fn,prepare))
         with patch.object(plugin,'AutoApplyController'), patch.object(plugin,'UniversalAggregator'):
             plugin.enable(api)
-        self.assertEqual(registered,[plugin._native_move_collision])
+        self.assertEqual(registered,[(plugin._native_move_collision,plugin._native_move_prepare)])
         self.assertEqual(
-            registered[0](api,'x.flac','y.flac',{},False),
+            registered[0][0](api,'x.flac','y.flac',{},False,registered[0][1](api)),
             {'action':'UNHANDLED'})
         # No real music touched. Enabling the feature is a separate user
         # confirmation and version-specific runtime acceptance.
@@ -195,7 +195,7 @@ class TestContract(unittest.TestCase):
             lib.mkdir(); recovery.mkdir()
             api=Api()
             callbacks=[]
-            api.register_file_move_collision_processor=lambda fn:callbacks.append(fn)
+            api.register_file_move_collision_processor=lambda fn,prepare:callbacks.append((fn,prepare))
             api.global_config.setting.update({
                 'move_files':True,
                 'move_files_to':str(lib),
@@ -203,7 +203,7 @@ class TestContract(unittest.TestCase):
             })
             with patch.object(plugin,'AutoApplyController'),patch.object(plugin,'UniversalAggregator'):
                 plugin.enable(api)
-            self.assertEqual(callbacks,[plugin._native_move_collision])
+            self.assertEqual(callbacks,[(plugin._native_move_collision,plugin._native_move_prepare)])
             FakeFolderPicker.folder=str(recovery)
             FakeMessageBox.answer=FakeMessageBox.StandardButton.Yes
             action=plugin.NativeMoveSafetyToggle()
@@ -214,14 +214,26 @@ class TestContract(unittest.TestCase):
             from neowulf_picard_repair import native_move_bridge
             with patch.object(native_move_bridge,'arbitrate_native_flac_move',
                               return_value={'action':'KEEP'}) as bridge:
-                out=callbacks[0](api,'staging.flac','library.flac',{'move_files':True},True)
+                out=callbacks[0][0](api,'staging.flac','library.flac',
+                                    {'move_files':True},True,callbacks[0][1](api))
             self.assertEqual(out,{'action':'KEEP'})
             bridge.assert_called_once()
             self.assertEqual(bridge.call_args.kwargs['destination_loaded'],True)
+            queued_policy = callbacks[0][1](api)
+            self.assertEqual(queued_policy,(True,str(recovery)))
             action.callback([])
             self.assertFalse(api.plugin_config['native_move_auto'])
-            self.assertEqual(callbacks[0](api,'a.flac','b.flac',{},False),
+            self.assertEqual(callbacks[0][0](api,'a.flac','b.flac',{},False,
+                                                  callbacks[0][1](api)),
                              {'action':'UNHANDLED'})
+            # A save already queued with a GUI-thread immutable snapshot
+            # cannot silently switch policy midworker if a user toggles it.
+            with patch.object(native_move_bridge,'arbitrate_native_flac_move',
+                              return_value={'action':'KEEP'}) as copied:
+                self.assertEqual(callbacks[0][0](api,'a.flac','b.flac',{},
+                                                  False,queued_policy),
+                                 {'action':'KEEP'})
+                copied.assert_called_once()
 
     def test_native_collision_opt_in_rejects_backup_nested_in_library(self):
         import tempfile
@@ -230,7 +242,7 @@ class TestContract(unittest.TestCase):
             recovery=library/'recovery'
             recovery.mkdir(parents=True)
             api=Api()
-            api.register_file_move_collision_processor=lambda fn:None
+            api.register_file_move_collision_processor=lambda fn,prepare:None
             api.global_config.setting.update({
                 'move_files':True,
                 'move_files_to':str(library),
