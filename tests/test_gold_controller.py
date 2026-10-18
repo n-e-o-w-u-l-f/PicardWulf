@@ -125,6 +125,7 @@ class ControllerTests(unittest.TestCase):
         self.removed=[]
         return types.SimpleNamespace(
             tagger=tagger,logger=logger,
+            plugin_config={'native_move_auto':False},
             global_config=types.SimpleNamespace(
                 setting={'remove_complete_albums_after_save':False})),album
 
@@ -183,6 +184,41 @@ class ControllerTests(unittest.TestCase):
                         time.sleep(.005)
                     self.assertTrue(controller.finished.messages)
                     api.global_config.setting['remove_complete_albums_after_save']=True
+                    controller.finished.flush()
+                    self.assertEqual(self.removed,[])
+                finally:
+                    controller.stop()
+
+    def test_native_copy_mode_disables_gold_retirement_before_verification(self):
+        with tempfile.TemporaryDirectory() as directory:
+            api,album=self.context(directory)
+            api.plugin_config["native_move_auto"]=True
+            tracker=Tracker()
+            with patch.dict(sys.modules,qt_stub()), patch.object(
+                    gold,'verify_gold_files') as worker:
+                controller=gold.start_gold_retirement(api,tracker)
+                try:
+                    controller.tick()
+                    self.assertIsNone(controller._pending)
+                    self.assertEqual(self.removed,[])
+                    worker.assert_not_called()
+                finally:
+                    controller.stop()
+
+    def test_native_copy_activated_while_worker_runs_prevents_gold_removal(self):
+        with tempfile.TemporaryDirectory() as directory:
+            api,album=self.context(directory)
+            tracker=Tracker()
+            with patch.dict(sys.modules,qt_stub()), patch.object(
+                    gold,'verify_gold_files',return_value=True):
+                controller=gold.start_gold_retirement(api,tracker)
+                try:
+                    controller.tick()
+                    until=time.monotonic()+5
+                    while not controller.finished.messages and time.monotonic()<until:
+                        time.sleep(.005)
+                    self.assertTrue(controller.finished.messages)
+                    api.plugin_config["native_move_auto"]=True
                     controller.finished.flush()
                     self.assertEqual(self.removed,[])
                 finally:
