@@ -201,7 +201,7 @@ def read_checkout(root: Path) -> dict[str, str]:
     root = Path(root)
     sources = {path: (root/path).read_bytes() for path in SOURCES}
     for path, payload in sources.items():
-        git_blob = b"blob " + str(len(payload)).encode("ascii") + b"\\x00" + payload
+        git_blob = b"blob " + str(len(payload)).encode("ascii") + b"\x00" + payload
         actual = sha1(git_blob).hexdigest()
         if actual != UPSTREAM_BLOBS[path]:
             raise RuntimeError(
