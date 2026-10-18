@@ -271,6 +271,7 @@ class NativePicard302CoreTest(unittest.TestCase):
                 "get_config":lambda:types.SimpleNamespace(setting={
                     "rename_files":True,
                     "move_files":True,
+                    "move_files_to":str(root),
                     "enable_tag_saving":False,
                     "move_overwrite_existing_files":False,
                     "delete_empty_dirs":False,
