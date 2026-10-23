@@ -1,12 +1,12 @@
 # LAST_TASKS — PicardWulf
 
-Updated: 2026-10-18 · Project: `n-e-o-w-u-l-f/PicardWulf`
+Updated: 2026-10-23 · Project: `n-e-o-w-u-l-f/PicardWulf`
 
 ## 2026-10-17 · Native Save Guard und echter FLAC-Rollback
 
 - Nach fehlgeschlagener Post-Commit-SHA-256- oder Decoderprüfung wird die vorherige FLAC jetzt **tatsächlich** aus dem separaten Backup wiederhergestellt; fehlerhafte Wiederherstellung bleibt explizit UNVERIFIED.
 - PicardWulf-eigene Auto-/manuelle `File.save()` erfordern `rename_files=False` und `move_files=False`; Toggle verweigert risikoreiche Aktivierung ohne Änderung an Picard.ini/Preset 3.
-- **365 Tests PASS**, nativer File-/Policy-/Ziel-Snapshot; Profilabweichungen vor Tag-Save und Move gestoppt, Thread-Kollision/Gold geschützt. [Nachweis](docs/planning/NATIVE-PICARD302-IMPLEMENTATION-20261018.md). **BMAX/Qt OPEN**. PR #1 DRAFT.
+- **370 Tests PASS** + realer Picard-3.0.2-Tagger-Start/Qt-Loop auf Legion. [Qt-Nachweis](docs/planning/PICARD302-ISOLATED-QT-GUI-20261023.md). **BMAX-Windows/Strg+S OPEN**, SSH erneut abgewiesen. PR #1 DRAFT.
 
 ## 2026-10-17 · Picard-Dateiaktion und BMAX-Audit
 
