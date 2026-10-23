@@ -81,6 +81,12 @@ try {
         & $python -B -m compat.qt_isolated_probe --upstream $upstream
         if ($LASTEXITCODE -ne 0) { throw 'Real Qt/Picard source runtime smoke failed.' }
         Write-Output 'REAL_QT_OFFSCREEN_NATIVE_API_SMOKE=PASS'
+        # A separate process boots the full native Picard Tagger/QMainWindow
+        # using only disposable configuration. No production Picard.exe or
+        # user plugin is started, and no audio is loaded.
+        & $python -B -m compat.qt_full_tagger_probe --upstream $upstream
+        if ($LASTEXITCODE -ne 0) { throw 'Full isolated Picard Tagger GUI smoke failed.' }
+        Write-Output 'REAL_QT_FULL_TAGGER_GUI_SMOKE=PASS'
         if (-not $SkipPythonTests) {
             & $python -B -m unittest discover -s tests -q
             if ($LASTEXITCODE -ne 0) { throw 'PicardWulf Windows regression failed.' }
