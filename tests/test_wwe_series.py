@@ -62,6 +62,18 @@ class WweSeriesTests(unittest.TestCase):
         self.assertTrue(f.year_conflict)
         self.assertFalse(module.wwe_folder("WWE The Music Volume 7","2007").year_conflict)
 
+    def test_official_deluxe_and_japan_album_suffixes_keep_series(self):
+        for album,year,volume in (
+            ("Voices: WWE The Music Vol. 9 (Deluxe Edition)",2009,9),
+            ("WWE The Music Vol. 8 [Japanese Edition]",2008,8),
+            ("WWF The Music Volume 4 (Remastered)",1999,4),
+        ):
+            with self.subTest(album=album):
+                folder=module.wwe_folder(album)
+                self.assertIsNotNone(folder)
+                self.assertEqual(folder.year,year)
+                self.assertEqual(folder.volume,volume)
+
     def test_does_not_confuse_related_wwe_albums_for_volume_series(self):
         for title in (
             "WWE Uncaged, Volume 9", "WWE Originals",
