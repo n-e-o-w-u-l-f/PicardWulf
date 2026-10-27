@@ -46,7 +46,7 @@ def first(value: object) -> str:
 def component(raw: object) -> str:
     """Safe one-level Windows/Posix name, never a path or device label."""
     val = unicodedata.normalize('NFC',first(raw))
-    val = _BAD_COMPONENT.sub('_',val).strip().rstrip(' .')
+    val = _BAD_COMPONENT.sub('_',val).strip().strip('.').rstrip(' .')
     if not val or val in {'.','..'} or val.split('.')[0].upper() in _RESERVED:
         return ''
     return val[:130].rstrip(' .')
