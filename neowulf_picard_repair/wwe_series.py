@@ -41,6 +41,14 @@ _FULL_METAL = re.compile(
     re.IGNORECASE,
 )
 _YEAR = re.compile(r"^\s*(19\d{2}|20\d{2})\b")
+_ALTERNATE_VOL_2 = re.compile(
+    r"^\s*(?:Hits\s+of\s+the\s+World\s+Wrestling\s+Federation\s*:\s*)?"
+    r"(?:WWF\s+)?We\s+Gotta\s+Wrestle\s*$", re.IGNORECASE,
+)
+_ALTERNATE_VOL_1 = re.compile(
+    r"^\s*WWF\s+Champions\s*:\s*The\s+Album\s*[-–]\s*"
+    r"Full\s+Metal\s+Edition\s*$", re.IGNORECASE,
+)
 _CANONICAL_FOLDER = re.compile(
     r"^\s*(?P<year>(?:19|20)\d{2})\s*-\s*WWE\s+The\s+Music"
     r"\s+Volume\s+(?P<volume>10|[1-9])\s*$", re.IGNORECASE,
@@ -67,8 +75,10 @@ def wwe_volume(album: object) -> int | None:
     title = _first(album)
     if len(title) > 220 or not title:
         return None
-    if _FULL_METAL.fullmatch(title):
+    if _FULL_METAL.fullmatch(title) or _ALTERNATE_VOL_1.fullmatch(title):
         return 1
+    if _ALTERNATE_VOL_2.fullmatch(title):
+        return 2
     if _NEW_DAY.fullmatch(title):
         return 10
     # Avoid "The Music, Vol. 9" nested inside unrelated artist names; only
