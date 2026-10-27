@@ -112,8 +112,8 @@ class WweSeriesPlacementPreview(BaseAction):
         else:
             unique=list(dict.fromkeys(lines))
             _show('WWE The Music – Soll-Zielordner (nur Vorschau)',
-                  '\\n'.join(unique[:24])+
-                  '\\n\\nKeine Dateien verschoben oder umgetaggt. '
+                  '\n'.join(unique[:24])+
+                  '\n\nKeine Dateien verschoben oder umgetaggt. '
                   'Für die reale Ablage muss das geprüfte Preset-3-Benennungsskript '
                   'die Funktion $pw_wwe_folder() aufrufen.')
 
