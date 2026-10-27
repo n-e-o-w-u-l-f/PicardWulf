@@ -58,6 +58,14 @@ def scan_library(roots, *, max_audio=250000, sample_limit=20, reader=read_album_
     })
     scanned = 0
     errors = 0
+    # Review, never rewrite: albumartist explicitly says Various Artists,
+    # yet three or more independently named tracks in one physical release
+    # directory share the same performer. This is evidence to INSPECT,
+    # not proof that the release credit should be overwritten.
+    credit_groups = defaultdict(lambda: {
+        "artists": set(), "tracks": 0, "examples": [],
+        "album": "", "directory": "",
+    })
     for item in roots:
         root = Path(item)
         if root.is_symlink() or not root.is_dir():
@@ -78,6 +86,21 @@ def scan_library(roots, *, max_audio=250000, sample_limit=20, reader=read_album_
                     errors += 1
                     tags = {}
                 title = str(tags.get("album") or "").strip()
+                artist = str(tags.get("artist") or "").strip()
+                albumartist = str(tags.get("albumartist") or "").strip()
+                if (title and artist and albumartist.casefold() in
+                        {"various artists", "various", "verschiedene interpreten"}
+                        and wwe_volume(title) is None):
+                    # Never fuse different releases merely because their
+                    # title is the same in different directories.
+                    key = (str(path.parent).casefold(), title.casefold())
+                    group = credit_groups[key]
+                    group["tracks"] += 1
+                    group["artists"].add(artist.casefold())
+                    group["album"] = title
+                    group["directory"] = str(path.parent)
+                    if len(group["examples"]) < sample_limit:
+                        group["examples"].append(str(path))
                 folder_hint = next(
                     (p for p in reversed(path.parent.parts)
                      if wwe_volume(p) is not None), "")
@@ -111,10 +134,22 @@ def scan_library(roots, *, max_audio=250000, sample_limit=20, reader=read_album_
                         "misplaced_candidate": misplaced,
                         "year_requires_review": bool(route.get("needs_review")),
                     })
+    review = [{
+        "album": group["album"],
+        "current_directory": group["directory"],
+        "track_count": group["tracks"],
+        "artist": next(iter(group["artists"])),
+        "sample_paths": group["examples"],
+        "action": "CHECK_RELEASE_CREDIT_MANUALLY_NO_AUTOMATIC_RETAG",
+    } for group in credit_groups.values()
+        if group["tracks"] >= 3 and len(group["artists"]) == 1]
+    review.sort(key=lambda entry: (entry["album"].casefold(),
+                                  entry["current_directory"].casefold()))
     return {
         "status": "READ_ONLY_NO_MOVES",
         "audio_files_scanned": scanned,
         "unreadable_metadata": errors,
+        "potentially_misfiled_artist_compilations": review,
         "by_volume": {
             key: {**value, "albums": sorted(value["albums"])}
             for key, value in sorted(summary.items(), key=lambda x: int(x[0]))
