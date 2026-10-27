@@ -137,6 +137,10 @@ class MixcloudLookupTests(unittest.TestCase):
         self.assertEqual(one["source"],"mixcloud")
         self.assertTrue(one["requires_confirmation"])
         self.assertEqual(one["duration_seconds"],3600)
+        self.assertEqual(one["uploaded_on"],"2025-08-18")
+        self.assertEqual(one["performance_date"],"")
+        self.assertFalse(one["performance_date_verified"])
+        self.assertEqual(one["suggested_folder"],"")
         self.assertEqual(result["automatic_tagging"],False)
 
     def test_wrong_artist_or_show_abstains_not_auto_tag(self):
