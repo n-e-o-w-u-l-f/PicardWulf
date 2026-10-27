@@ -75,7 +75,7 @@ def _diag(cfg):
 
 
 class WweSeriesPlacementPreview(BaseAction):
-    TITLE = 'WWE The Music: Zielordner prüfen (nur lesen)'
+    TITLE = 'Ablage prüfen: WWE / Künstler-Compilations (nur lesen)'
     MENU = ('PicardWulf',)
 
     def callback(self, objs):
@@ -97,10 +97,18 @@ class WweSeriesPlacementPreview(BaseAction):
                 lines.append(str(info['folder']).replace('/','\\'))
                 if info.get('needs_review'):
                     lines.append('  Hinweis: Datum/Originaljahr prüfen (abweichende Ausgabe).')
+            elif info.get('state')=='VA_OR_REVIEW' and info.get('needs_review'):
+                lines.append(
+                    'Künstler-Compilation prüfen: '
+                    + str(get('album',''))
+                    + ' – Albumartist steht auf Various Artists; '
+                    + 'der Titelinterpret allein beweist keinen Solo-Release. '
+                    + 'Keine automatische Korrektur.')
         if not lines:
             _show('WWE The Music – Vorschau',
-                  'Keine bekannte WWE-The-Music-Reihe in den ausgewählten '
-                  'Dateien erkannt. Keine Dateien oder Einstellungen geändert.')
+                  'Keine bekannte WWE-The-Music-Reihe oder verdächtige Künstler-'
+                  'Compilation in den ausgewählten Dateien erkannt. '
+                  'Keine Dateien oder Einstellungen geändert.')
         else:
             unique=list(dict.fromkeys(lines))
             _show('WWE The Music – Soll-Zielordner (nur Vorschau)',
