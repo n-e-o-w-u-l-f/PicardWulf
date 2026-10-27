@@ -75,12 +75,13 @@ def _diag(cfg):
 
 
 class WweSeriesPlacementPreview(BaseAction):
-    TITLE = 'Ablage prüfen: WWE / Künstler-Compilations (nur lesen)'
+    TITLE = 'Ablage prüfen: Sampler, Kollaborationen, Künstler, LiveSets (nur lesen)'
     MENU = ('PicardWulf',)
 
     def callback(self, objs):
         """Never changes tags, Picard profiles, or filesystem paths."""
         from .wwe_series import route_metadata
+        from .album_routing import route_album
         files=list(objs or [])
         lines=[]
         for file in files[:20]:
@@ -88,16 +89,27 @@ class WweSeriesPlacementPreview(BaseAction):
             if md is None:continue
             get=getattr(md,'get',None)
             if not callable(get):continue
-            info=route_metadata({
-                key:get(key,'')
-                for key in ('album','artist','albumartist','date','originaldate',
-                            '_secondaryreleasetype')
-            })
-            if info.get('state')=='WWE_SERIES':
-                lines.append(str(info['folder']).replace('/','\\'))
-                if info.get('needs_review'):
-                    lines.append('  Hinweis: Datum/Originaljahr prüfen (abweichende Ausgabe).')
-            elif info.get('state')=='VA_OR_REVIEW' and info.get('needs_review'):
+            snapshot={key:get(key,'') for key in (
+                'album','artist','albumartist','date','originaldate',
+                'event_date','set_date','_secondaryreleasetype','set_type',
+                'is_liveset','sampler_collection','sampler_volume')}
+            getall=getattr(md,'getall',None)
+            if callable(getall):
+                snapshot['albumartists']=(getall('albumartists') or
+                                          getall('_albumartists'))
+            else:
+                snapshot['albumartists']=get('albumartists',())
+            info=route_metadata(snapshot)
+            decision=route_album(snapshot)
+            if decision.folder:
+                lines.append(str(decision.folder).replace('/','\\'))
+                if decision.review:
+                    lines.append('  Prüfhinweis: ' + decision.reason)
+            elif decision.review:
+                lines.append('Ablage prüfen: ' + str(get('album',''))
+                             + ' – ' + decision.reason
+                             + ' (keine automatische Korrektur).')
+            if info.get('state')=='VA_OR_REVIEW' and info.get('needs_review'):
                 lines.append(
                     'Künstler-Compilation prüfen: '
                     + str(get('album',''))
@@ -839,13 +851,18 @@ def enable(api):
     global _aggregator, _controller, _save_tracker, _gold_controller
     api.register_tools_menu_action(Inspect)
     api.register_tools_menu_action(Repair)
-    # Independent Picard scripting API: registered but NEVER alters Preset 3
-    # until its exact existing script is inspected and safely migrated.
+    # Native Picard scripting functions are optional and NEVER mutate the
+    # active file naming preset, user tags or Picard.ini automatically.
     from .wwe_series import picard_wwe_folder
+    from .album_routing import picard_album_folder
     api.register_script_function(
         picard_wwe_folder, name='pw_wwe_folder',
         documentation='WWE/WWF The Music sampler series album folder, read-only.',
         signature='$pw_wwe_folder(album,date,originaldate)')
+    api.register_script_function(
+        picard_album_folder, name='pw_album_folder',
+        documentation='Verified sampler, collaboration, artist, DJ LiveSet album folder.',
+        signature='$pw_album_folder(album,albumartist,originaldate,date,secondary,albumartists,collection,volume)')
     api.register_file_action(WweSeriesPlacementPreview)
     api.register_album_metadata_processor(_album_guard, priority=-1000)
     api.plugin_config.register_option('auto_apply_best', True)
