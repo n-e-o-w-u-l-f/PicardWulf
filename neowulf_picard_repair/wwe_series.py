@@ -28,8 +28,8 @@ _VOLUMES = re.compile(
     re.IGNORECASE,
 )
 _NEW_DAY = re.compile(
-    r"^\\s*WWE\\s*[:\\-]?\\s*The\\s+Music\\s*:\\s*A\\s+New\\s+Day"
-    r"\\s*,?\\s*Vol(?:ume)?\\.?\\s*10\\s*$",
+    r"^\s*WWE\s*[:\-]?\s*The\s+Music\s*:\s*A\s+New\s+Day"
+    r"\s*,?\s*Vol(?:ume)?\.?\s*10\s*$",
     re.IGNORECASE,
 )
 _FULL_METAL = re.compile(
