@@ -127,6 +127,50 @@ class GuiTests(unittest.TestCase):
             self.assertEqual(f.calls,[(f.filename,f.metadata,settings)])
             self.assertEqual(settings,before)
 
+    def test_wwe_series_volumes_2_to_9_use_canonical_va_subfolder(self):
+        albums={
+            2:("WWF The Music Volume 2",1997),
+            3:("WWF The Music Volume 3",1998),
+            4:("WWF The Music, Vol. 4",1999),
+            5:("WWF The Music Volume 5",2001),
+            6:("ThemeAddict: WWE The Music, Vol. 6",2004),
+            7:("WWE The Music Vol. 7",2007),
+            8:("WWE The Music Vol. 8",2008),
+            9:("Voices: WWE The Music Vol. 9",2009),
+        }
+        with tempfile.TemporaryDirectory() as t:
+            f,settings,backup,tracker,api=self.fixture(t)
+            # The plugin preserves the native Preset-3 leaf naming and never
+            # modifies the original script, active settings or source path.
+            native=f.destination
+            source=Path(f.filename).read_bytes()
+            settings["active_file_naming_script_id"]="Preset 3"
+            unchanged=dict(settings)
+            for number,(album,year) in albums.items():
+                with self.subTest(volume=number):
+                    f.metadata.update(album=album,albumartist="Jim Johnston",artist="Jim Johnston")
+                    snapshot=ui.capture_safe_import(f,settings,backup,tracker)
+                    self.assertEqual(
+                        Path(snapshot["destination"]),
+                        Path(settings["move_files_to"])/"Various Artists"/
+                        "WWE The Music"/f"{year} - WWE The Music Volume {number}"/
+                        Path(native).name,
+                    )
+                    self.assertEqual(snapshot["source"],f.filename)
+                    self.assertFalse(Path(snapshot["destination"]).exists())
+            self.assertEqual(settings,unchanged)
+            self.assertEqual(f.destination,native)
+            self.assertEqual(Path(f.filename).read_bytes(),source)
+
+    def test_solo_compilation_safe_import_keeps_artist_preset_path(self):
+        with tempfile.TemporaryDirectory() as t:
+            f,settings,backup,tracker,_=self.fixture(t)
+            f.metadata.update(album="Curtain Call 2",albumartist="Eminem",
+                              artist="Eminem",_secondaryreleasetype="compilation")
+            f.destination=str(Path(settings["move_files_to"])/"Eminem"/"Curtain Call 2"/"01 Track.flac")
+            out=ui.capture_safe_import(f,settings,backup,tracker)
+            self.assertEqual(out["destination"],f.destination)
+
     def test_unsaved_file_rejected(self):
         with tempfile.TemporaryDirectory() as t:
             f,settings,backup,tracker,_=self.fixture(t)
