@@ -58,18 +58,29 @@ def capture_safe_import(file, settings, recovery_dir, tracker=None):
         raise SafeImportUnavailable("Picard destination is outside configured library root")
     if target == Path(source):
         raise SafeImportUnavailable("Source is already the target")
-    # Preview/confirm the real destination for known WWE/WWF sampler-series
-    # releases, preserving the *entire original track filename* produced
-    # by the active naming preset. Do NOT change the user's script,
-    # albumartist tags, or any other artist/compilation destination.
-    from .wwe_series import wwe_folder
+    # Classification is based on RELEASE metadata, not a single track's
+    # performer or the compilation bit. A fully evidenced 4-way destination
+    # overrides only the album DIRECTORY of this explicitly confirmed safe
+    # import; retain the filename made by the user's current Preset 3.
+    # Ambiguous/incomplete releases keep native Picard behavior. This does
+    # not modify a Picard setting or touch data during preview.
+    from .album_routing import route_album
     getter = getattr(metadata, 'get', None)
     if callable(getter):
-        special = wwe_folder(
-            getter('album',''), getter('date',''), getter('originaldate',''))
-        if special is not None:
+        snapshot = {key: getter(key, '') for key in (
+            'album', 'albumartist', 'artist', 'originaldate', 'date',
+            'event_date', 'set_date', 'releasetype', '_secondaryreleasetype',
+            'sampler_collection', 'sampler_volume', 'is_liveset', 'set_type')}
+        getall = getattr(metadata, 'getall', None)
+        if callable(getall):
+            snapshot['albumartists'] = (getall('albumartists') or
+                                        getall('_albumartists'))
+        else:
+            snapshot['albumartists'] = getter('albumartists', ())
+        decision = route_album(snapshot)
+        if decision.folder and not decision.review:
             target = library_root.joinpath(
-                *special.relative_folder.split('/'), target.name)
+                *decision.folder.split('/'), target.name)
     # The offline importer creates missing album/series subfolders only after
     # explicit confirmation, then rolls back empty created folders on error.
     return {
