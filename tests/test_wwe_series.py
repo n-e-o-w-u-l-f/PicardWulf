@@ -139,6 +139,40 @@ class WweInventoryTests(unittest.TestCase):
             self.assertEqual(correct.read_bytes(),b"non-destructive")
             self.assertEqual(result["status"],"READ_ONLY_NO_MOVES")
 
+    def test_solo_compilation_false_various_credit_review_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            va=root/"Various Artists"/"Curtain Call 2"
+            va.mkdir(parents=True)
+            files={}
+            for i in range(1,5):
+                f=va/f"{i:02d} Song {i}.flac"
+                f.write_bytes(b"untouched musician audio file")
+                files[f]={"album":"Curtain Call 2",
+                          "albumartist":"Various Artists","artist":"Eminem"}
+            report=self.audit.scan_library([root],reader=lambda p:files[p])
+            flagged=report["potentially_misfiled_artist_compilations"]
+            self.assertEqual(len(flagged),1)
+            self.assertEqual(flagged[0]["artist"],"eminem")
+            self.assertEqual(flagged[0]["track_count"],4)
+            self.assertIn("NO_AUTOMATIC_RETAG",flagged[0]["action"])
+            self.assertTrue(all(p.read_bytes()==b"untouched musician audio file" for p in files))
+
+    def test_real_various_artists_mix_not_misclassified_as_solo(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            va=root/"Various Artists"/"Bravo Hits 38"
+            va.mkdir(parents=True)
+            credits=["Eminem","Madonna","Rihanna","Nena"]
+            files={}
+            for i,artist in enumerate(credits):
+                path=va/f"{i} Track.flac"
+                path.write_bytes(b"test")
+                files[path]={"album":"Bravo Hits 38","albumartist":"Various Artists",
+                             "artist":artist}
+            result=self.audit.scan_library([root],reader=lambda p:files[p])
+            self.assertFalse(result["potentially_misfiled_artist_compilations"])
+
     def test_path_alias_fallback_without_album_tag(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)
