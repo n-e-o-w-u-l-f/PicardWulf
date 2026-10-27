@@ -131,13 +131,14 @@ def scan_library(roots, *, max_audio=250000, sample_limit=20, reader=read_album_
                     raise
                 except Exception:
                     tags = None
-                if not isinstance(tags, dict):
+                read_ok = isinstance(tags, dict)
+                if not read_ok:
                     errors += 1
                     if len(unreadable_examples) < sample_limit:
                         unreadable_examples.append(str(path))
                     tags = {}
                 title = str(tags.get("album") or "").strip()
-                if not title:
+                if not title and read_ok:
                     without_album_tag += 1
                 artist = str(tags.get("artist") or "").strip()
                 albumartist = str(tags.get("albumartist") or "").strip()
@@ -184,7 +185,10 @@ def scan_library(roots, *, max_audio=250000, sample_limit=20, reader=read_album_
                 if tags_route:
                     route = tags_route
                     evidence = "album_tags"
-                    conflicting = bool(hint and hint.volume != tags_route["volume"])
+                    conflicting = bool(
+                        hint and (hint.volume != tags_route["volume"] or
+                                  hint.year != tags_route["year"] or
+                                  hint.year_conflict))
                 elif hint:
                     route = {"volume": hint.volume, "year": hint.year,
                              "folder": hint.relative_folder,
