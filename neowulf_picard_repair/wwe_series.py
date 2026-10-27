@@ -41,6 +41,10 @@ _FULL_METAL = re.compile(
     re.IGNORECASE,
 )
 _YEAR = re.compile(r"^\s*(19\d{2}|20\d{2})\b")
+_CANONICAL_FOLDER = re.compile(
+    r"^\s*(?P<year>(?:19|20)\d{2})\s*-\s*WWE\s+The\s+Music"
+    r"\s+Volume\s+(?P<volume>10|[1-9])\s*$", re.IGNORECASE,
+)
 _VA = {"various artists", "various", "verschiedene interpreten"}
 _PROVIDER = {"spotify", "apple music", "deezer", "soundcloud", "itunes"}
 
@@ -101,6 +105,31 @@ def wwe_folder(album: object, date: object = "", originaldate: object = "") -> S
         year_conflict=supplied_year is not None and supplied_year != year,
     )
 
+
+
+def wwe_folder_hint(folder: object, date: object = "", originaldate: object = "") -> SeriesFolder | None:
+    """Recognize both original release labels and year-prefixed canonical folders.
+
+    Media lacking album tags can still be inventoried if already under a
+    '2009 - WWE The Music Volume 9' folder. A year/volume conflict is flagged.
+    """
+    label = _first(folder)
+    match = _CANONICAL_FOLDER.fullmatch(label)
+    if match:
+        folder_year = int(match.group("year"))
+        volume = int(match.group("volume"))
+        if volume == 1:
+            if folder_year not in (1995, 1996):
+                return None
+            year = folder_year
+        else:
+            year = ORIGINAL_YEARS[volume]
+        return SeriesFolder(
+            volume=volume, year=year,
+            relative_folder=f"Various Artists/WWE The Music/{year} - WWE The Music Volume {volume}",
+            year_conflict=folder_year != year,
+        )
+    return wwe_folder(label, date, originaldate)
 
 def route_metadata(metadata: Mapping[str, object]) -> dict[str, object]:
     """Preview only, never change audio tags or active Picard naming options.
