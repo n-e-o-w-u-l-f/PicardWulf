@@ -22,9 +22,10 @@ ORIGINAL_YEARS = {
     7: 2007, 8: 2008, 9: 2009, 10: 2010,
 }
 _VOLUMES = re.compile(
-    r"\b(?:WWF|WWE)\s*[:\-]?\s*The\s+Music\s*"
+    r"^\s*(?:(?:ThemeAddict|Voices)\s*:\s*)?"
+    r"(?:WWF|WWE)\s*[:\-]?\s*The\s+Music\s*"
     r"(?:,|:|\-|\s)*\s*Vol(?:ume)?\.?\s*"
-    r"(?P<volume>0?[1-9]|10)\b",
+    r"(?P<volume>0?[1-9]|10)\s*$",
     re.IGNORECASE,
 )
 _NEW_DAY = re.compile(
