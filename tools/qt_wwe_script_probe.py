@@ -35,6 +35,7 @@ def main() -> int:
         parser=ScriptParser()
         for title,year,vol in [
             ("WWF The Music, Volume 2","1997",2),
+            ("Hits of the World Wrestling Federation: We Gotta Wrestle","1997",2),
             ("ThemeAddict: WWE The Music, Vol. 6","2004",6),
             ("Voices: WWE The Music, Vol. 9","2009",9),
         ]:
