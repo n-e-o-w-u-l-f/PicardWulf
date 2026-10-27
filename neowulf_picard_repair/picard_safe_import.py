@@ -58,6 +58,18 @@ def capture_safe_import(file, settings, recovery_dir, tracker=None):
         raise SafeImportUnavailable("Picard destination is outside configured library root")
     if target == Path(source):
         raise SafeImportUnavailable("Source is already the target")
+    # Preview/confirm the real destination for known WWE/WWF sampler-series
+    # releases, preserving the *entire original track filename* produced
+    # by the active naming preset. Do NOT change the user's script,
+    # albumartist tags, or any other artist/compilation destination.
+    from .wwe_series import wwe_folder
+    getter = getattr(metadata, 'get', None)
+    if callable(getter):
+        special = wwe_folder(
+            getter('album',''), getter('date',''), getter('originaldate',''))
+        if special is not None:
+            target = library_root.joinpath(
+                *special.relative_folder.split('/'), target.name)
     # The offline importer creates missing album/series subfolders only after
     # explicit confirmation, then rolls back empty created folders on error.
     return {
