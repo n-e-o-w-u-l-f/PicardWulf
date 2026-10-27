@@ -35,8 +35,10 @@ AUDIO_EXTENSIONS = frozenset({
 
 
 def read_album_tags(path: Path) -> dict[str, str]:
+    # Missing dependency is a hard error, not a false "zero missing albums"
+    # report. On BMAX Python 3.14, mutagen was previously verified present.
+    import mutagen
     try:
-        import mutagen
         audio = mutagen.File(str(path), easy=True)
         if not audio:
             return {}
@@ -79,17 +81,23 @@ def scan_library(roots, *, max_audio=250000, sample_limit=20, reader=read_album_
         "artists": set(), "tracks": 0, "examples": [],
         "album": "", "directory": "",
     })
+    def redirected(path):
+        # Modern Windows Python detects NTFS junctions separately from
+        # symbolic links; never traverse reparse points outside user root.
+        return path.is_symlink() or (
+            hasattr(path, "is_junction") and path.is_junction())
+
     for item in roots:
         root = Path(item)
-        if root.is_symlink() or not root.is_dir():
+        if redirected(root) or not root.is_dir():
             raise ValueError(f"Library root is not a real directory: {root}")
         root = root.resolve(strict=True)
         for folder, dirs, files in os.walk(root, followlinks=False):
             # Don't traverse symlink/junctioned directories.
-            dirs[:] = [d for d in dirs if not (Path(folder) / d).is_symlink()]
+            dirs[:] = [d for d in dirs if not redirected(Path(folder) / d)]
             for name in files:
                 path = Path(folder) / name
-                if path.suffix.casefold() not in AUDIO_EXTENSIONS or path.is_symlink():
+                if path.suffix.casefold() not in AUDIO_EXTENSIONS or redirected(path):
                     continue
                 scanned += 1
                 if scanned > max_audio:
