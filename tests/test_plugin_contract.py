@@ -100,8 +100,8 @@ class TestContract(unittest.TestCase):
         before=api.global_config.setting['file_renaming_scripts']['a']['script']
         with patch.object(plugin,'AutoApplyController'), patch.object(plugin,'UniversalAggregator'):
             plugin.enable(api)
-        self.assertEqual(len(api.registered),26)
-        self.assertEqual(len([x for x in api.registered if x[0]=='file_action']),4)
+        self.assertEqual(len(api.registered),27)
+        self.assertEqual(len([x for x in api.registered if x[0]=='file_action']),5)
         self.assertEqual(sum(x[0]=='file_saved_event' for x in api.registered),1)
         self.assertTrue(api.plugin_config['auto_apply_best'])
         self.assertFalse(api.plugin_config['auto_save_with_backup'])
@@ -124,6 +124,21 @@ class TestContract(unittest.TestCase):
         text=' '.join(str(x) for x in FakeMessageBox.messages)
         self.assertIn('WWE The Music Volume 2',text)
         self.assertIn('Keine Dateien verschoben',text)
+
+    def test_liveset_metadata_gui_action_registered_and_requires_explicit_search(self):
+        api=Api()
+        with patch.object(plugin,'AutoApplyController'),patch.object(plugin,'UniversalAggregator'):
+            plugin.enable(api)
+        actions=[entry[1] for entry in api.registered if entry[0]=='file_action']
+        self.assertIn(plugin.LiveSetMetadataSearch,actions)
+        item=types.SimpleNamespace(metadata={
+            'album':'Boiler Room DJ Set','albumartist':'DJ Example'})
+        button=plugin.LiveSetMetadataSearch()
+        button.api=api
+        from neowulf_picard_repair import liveset_ui
+        with patch.object(liveset_ui,'show_liveset_lookup',return_value=False) as action:
+            self.assertFalse(button.callback([item]))
+            action.assert_called_once_with(api,[item])
 
     def test_four_way_script_and_selected_file_preview_are_registered(self):
         api=Api()
