@@ -74,6 +74,26 @@ class WweSeriesTests(unittest.TestCase):
                 self.assertEqual(folder.year,year)
                 self.assertEqual(folder.volume,volume)
 
+    def test_international_wwf_volume_2_and_full_metal_reissue_aliases(self):
+        for label in (
+            "Hits of the World Wrestling Federation: We Gotta Wrestle",
+            "WWF We Gotta Wrestle",
+        ):
+            with self.subTest(album=label):
+                path=module.wwe_folder(label)
+                self.assertEqual(path.volume,2)
+                self.assertEqual(path.relative_folder,
+                    "Various Artists/WWE The Music/1997 - WWE The Music Volume 2")
+        for label in (
+            "WWF Champions: The Album – Full Metal Edition",
+            "WWF Champions: The Album - Full Metal Edition",
+        ):
+            with self.subTest(album=label):
+                self.assertEqual(module.wwe_volume(label),1)
+                self.assertEqual(module.wwe_folder(label,"1996").relative_folder,
+                    "Various Artists/WWE The Music/1996 - WWE The Music Volume 1")
+                self.assertIsNone(module.wwe_folder(label))
+
     def test_does_not_confuse_related_wwe_albums_for_volume_series(self):
         for title in (
             "WWE Uncaged, Volume 9", "WWE Originals",
