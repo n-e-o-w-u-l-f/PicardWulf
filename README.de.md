@@ -10,6 +10,14 @@
 
 > **Status:** Entwicklungsversion. Lokale Tests erfolgreich; Installation, Plugin-Aktivierung, Live-APIs und das Speichern auf BMAX-B6 sind noch nicht vollständig praktisch verifiziert.
 
+## Neue Ablagekategorien und LiveSet-Metadaten (Entwicklungsstand)
+
+PicardWulf unterscheidet künftig Release-Sampler, echte albumweite Kollaborationen, Künstleralben und DJ-/Radio-LiveSets. Die Zielordner werden unabhängig von der alten „Compilation = Various Artists“-Fehlannahme bewertet. Bei unsicheren Metadaten wird keine neue Zielablage erfunden. Der sichere FLAC-Import nutzt vollständig geprüfte Kategorien unter Beibehaltung des Preset-3-Trackdateinamens.
+
+Eine ausschließlich mit Zustimmung angestoßene **Mixcloud-Metadatensuche** kann LiveSet-/DJ-/Showtitel samt Quellen-URL als Vorschlag zurückgeben. Das Upload-Datum gilt **nicht** als belegter Auftrittstermin. Kein automatisches Scraping von Webseiten oder Medien-Downloads, keine automatisch geschriebenen Tags.
+
+[**Vollständige 4-Wege-Ablagestruktur, Picard-Skriptfunktion und LiveSet-Quellensuche**](docs/planning/FOUR-WAY-ALBUM-ROUTING-LIVESETS-20261027.md). Der produktive Einsatz bleibt bis zur vollständigen Qt-/Windows-Abnahme gesperrt; Picard.ini, Preset 3 und Originalmusik werden nicht verändert.
+
 ## Funktionen
 
 - **Alle Quellen gemeinsam bewerten:** MusicBrainz, Deezer, Apple/iTunes sowie Spotify, SoundCloud und Last.fm mit vorhandenen API-Berechtigungen.
