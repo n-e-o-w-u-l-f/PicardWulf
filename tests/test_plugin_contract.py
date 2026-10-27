@@ -100,7 +100,7 @@ class TestContract(unittest.TestCase):
         before=api.global_config.setting['file_renaming_scripts']['a']['script']
         with patch.object(plugin,'AutoApplyController'), patch.object(plugin,'UniversalAggregator'):
             plugin.enable(api)
-        self.assertEqual(len(api.registered),25)
+        self.assertEqual(len(api.registered),26)
         self.assertEqual(len([x for x in api.registered if x[0]=='file_action']),4)
         self.assertEqual(sum(x[0]=='file_saved_event' for x in api.registered),1)
         self.assertTrue(api.plugin_config['auto_apply_best'])
@@ -111,7 +111,7 @@ class TestContract(unittest.TestCase):
         with patch.object(plugin,'AutoApplyController'),patch.object(plugin,'UniversalAggregator'):
             plugin.enable(api)
         functions=[entry for entry in api.registered if entry[0]=='script_function']
-        self.assertEqual(len(functions),1)
+        self.assertEqual(len(functions),2)
         self.assertEqual(functions[0][2]['name'],'pw_wwe_folder')
         self.assertEqual(functions[0][1](None,'Voices: WWE The Music Vol. 9','2009'),
                          'Various Artists/WWE The Music/2009 - WWE The Music Volume 9')
@@ -124,6 +124,32 @@ class TestContract(unittest.TestCase):
         text=' '.join(str(x) for x in FakeMessageBox.messages)
         self.assertIn('WWE The Music Volume 2',text)
         self.assertIn('Keine Dateien verschoben',text)
+
+    def test_four_way_script_and_selected_file_preview_are_registered(self):
+        api=Api()
+        with patch.object(plugin,'AutoApplyController'),patch.object(plugin,'UniversalAggregator'):
+            plugin.enable(api)
+        functions={entry[2]['name']:entry[1]
+                   for entry in api.registered if entry[0]=='script_function'}
+        self.assertIn('pw_album_folder',functions)
+        folder=functions['pw_album_folder'](
+            None,'Joint Album','Alpha, Beta & Gamma','2023','','',
+            'Alpha;Beta;Gamma')
+        self.assertEqual(folder,
+            'Collaborations/Alpha, Beta & Gamma/2023 - Joint Album')
+        self.assertEqual(functions['pw_album_folder'](
+            None,'Curtain Call 2','Eminem','2022'),
+            'Eminem/2022 - Curtain Call 2')
+        action=plugin.WweSeriesPlacementPreview()
+        action.api=api
+        metadata={'album':'Boiler Room DJ Set','albumartist':'DJ Example',
+                  'event_date':'2025-07-19','set_type':'dj-set'}
+        unchanged=dict(metadata)
+        action.callback([types.SimpleNamespace(metadata=metadata)])
+        rendered=' '.join(str(v) for v in FakeMessageBox.messages)
+        self.assertIn('LiveSets',rendered)
+        self.assertIn('Keine Dateien verschoben',rendered)
+        self.assertEqual(metadata,unchanged)
 
     def test_uncertain_va_artist_compilation_warns_without_retagging(self):
         api=Api()
