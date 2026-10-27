@@ -15,7 +15,6 @@ from typing import Callable, Mapping
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from .album_routing import route_album
 
 API = 'https://api.mixcloud.com/search/'
 _MAX_BODY = 256_000
@@ -90,18 +89,18 @@ def lookup_mixcloud(artist: str,title: str,*,fetch: Callable = public_mixcloud_r
         link=str(row.get('url') or '')
         if not link.startswith('https://www.mixcloud.com/'):
             continue
-        meta={'album':name,'albumartist':dj,'artist':dj,
-              'date':day, 'is_liveset':True}
-        plan=route_album(meta)
-        if plan.review:
-            continue
+        # Mixcloud created_time is an UPLOAD timestamp. It does not prove
+        # the actual set/performance date. Never turn it into canonical
+        # YYYY-MM-DD folder metadata without further evidence.
         matches.append({
             'source':'mixcloud','source_url':link,
-            'title':name,'artist':dj,'date':day,
+            'title':name,'artist':dj,
+            'uploaded_on':day, 'performance_date':'',
+            'performance_date_verified':False,
+            'suggested_folder':'',
             'duration_seconds':max(0,min(24*3600,int(row.get('audio_length') or 0)))
                 if str(row.get('audio_length') or '0').isdigit() else 0,
             'score':round((artist_score+title_score)/2,3),
-            'suggested_folder':plan.folder,
             'requires_confirmation':True,
         })
     matches.sort(key=lambda m:(-m['score'],m['source_url']))
