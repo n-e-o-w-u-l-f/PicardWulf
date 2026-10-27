@@ -14,7 +14,20 @@ import os
 from pathlib import Path
 from collections import defaultdict
 
-from neowulf_picard_repair.wwe_series import route_metadata, wwe_folder, wwe_volume
+# The command must work on BMAX's standalone Python where PyQt6/Picard
+# are NOT importable. Import only this pure helper; package __init__ starts
+# Picard plugin dependencies that an offline, read-only audit must not need.
+from importlib.util import module_from_spec, spec_from_file_location
+import sys
+
+_module_path = Path(__file__).resolve().parents[1] / "neowulf_picard_repair" / "wwe_series.py"
+_spec = spec_from_file_location("_picardwulf_wwe_series_inventory", _module_path)
+_series = module_from_spec(_spec)
+sys.modules[_spec.name] = _series
+_spec.loader.exec_module(_series)
+route_metadata = _series.route_metadata
+wwe_folder = _series.wwe_folder
+wwe_volume = _series.wwe_volume
 
 AUDIO_EXTENSIONS = frozenset({
     ".flac", ".mp3", ".m4a", ".mp4", ".aac", ".ogg", ".opus", ".wma"
@@ -39,7 +52,7 @@ def read_album_tags(path: Path) -> dict[str, str]:
             "date": value("date") or value("year"),
             "originaldate": value("originaldate") or value("originalyear"),
         }
-    except (OSError, ValueError, TypeError, Exception):
+    except Exception:
         # Some media may be damaged or inaccessible. Never abort a whole
         # read-only recovery search on one unparseable audio file.
         return {}
