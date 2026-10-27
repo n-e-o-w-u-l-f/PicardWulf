@@ -74,6 +74,15 @@ def _diag(cfg):
     return scripts, candidates, active, raw_active, enabled_profiles
 
 
+class LiveSetMetadataSearch(BaseAction):
+    TITLE = 'LiveSets: Mixcloud-Metadaten suchen (nur lesen)'
+    MENU = ('PicardWulf',)
+
+    def callback(self, objs):
+        from .liveset_ui import show_liveset_lookup
+        return show_liveset_lookup(self.api, objs)
+
+
 class WweSeriesPlacementPreview(BaseAction):
     TITLE = 'Ablage prüfen: Sampler, Kollaborationen, Künstler, LiveSets (nur lesen)'
     MENU = ('PicardWulf',)
@@ -864,6 +873,7 @@ def enable(api):
         documentation='Verified sampler, collaboration, artist, DJ LiveSet album folder.',
         signature='$pw_album_folder(album,albumartist,originaldate,date,secondary,albumartists,collection,volume)')
     api.register_file_action(WweSeriesPlacementPreview)
+    api.register_file_action(LiveSetMetadataSearch)
     api.register_album_metadata_processor(_album_guard, priority=-1000)
     api.plugin_config.register_option('auto_apply_best', True)
     api.plugin_config.register_option('auto_save_with_backup', False)
@@ -942,6 +952,8 @@ def disable():
     stop_collision_previews()
     from .picard_safe_import import stop_safe_imports
     stop_safe_imports()
+    from .liveset_ui import stop_live_set_lookups
+    stop_live_set_lookups()
     if _gold_controller is not None:
         _gold_controller.stop()
         _gold_controller = None
