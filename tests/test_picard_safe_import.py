@@ -171,6 +171,50 @@ class GuiTests(unittest.TestCase):
             out=ui.capture_safe_import(f,settings,backup,tracker)
             self.assertEqual(out["destination"],f.destination)
 
+    def test_four_way_targets_preserve_native_track_leaf_and_do_not_touch_preset(self):
+        cases=[
+            ("SAMPLER",{"album":"Bravo Hits Vol. 38",
+                "albumartist":"Various Artists","date":"2002"},
+             ("Various Artists","Bravo Hits","2002 - Bravo Hits Vol. 38")),
+            ("COLLABORATION",{"album":"A New Project","date":"2023",
+                "albumartist":"Alpha, Beta & Gamma",
+                "albumartists":["Alpha","Beta","Gamma"]},
+             ("Collaborations","Alpha, Beta & Gamma","2023 - A New Project")),
+            ("ARTIST",{"album":"Curtain Call 2","albumartist":"Eminem",
+                "date":"2022","_secondaryreleasetype":"compilation"},
+             ("Eminem","2022 - Curtain Call 2")),
+            ("LIVESET",{"album":"Boiler Room DJ Set","albumartist":"DJ Example",
+                "event_date":"2025-07-19","date":"2026",
+                "set_type":"dj-set"},
+             ("LiveSets","DJ Example","2025-07-19 - Boiler Room DJ Set")),
+        ]
+        with tempfile.TemporaryDirectory() as t:
+            f,settings,backup,tracker,_=self.fixture(t)
+            settings["active_file_naming_script_id"]="Preset 3"
+            before=dict(settings)
+            original=f.destination
+            audio=Path(f.filename).read_bytes()
+            for kind,metadata,parts in cases:
+                with self.subTest(category=kind):
+                    f.metadata=dict(metadata)
+                    snap=ui.capture_safe_import(f,settings,backup,tracker)
+                    self.assertEqual(
+                        Path(snap["destination"]),
+                        Path(settings["move_files_to"]).joinpath(*parts,Path(original).name))
+                    self.assertEqual(snap["source"],f.filename)
+                    self.assertFalse(Path(snap["destination"]).exists())
+            self.assertEqual(settings,before)
+            self.assertEqual(f.destination,original)
+            self.assertEqual(Path(f.filename).read_bytes(),audio)
+
+    def test_ambiguous_release_leaves_native_target_unchanged(self):
+        with tempfile.TemporaryDirectory() as t:
+            f,settings,backup,tracker,_=self.fixture(t)
+            f.metadata={"album":"Untitled Party Mix",
+                        "albumartist":"Various Artists","date":"2022"}
+            outcome=ui.capture_safe_import(f,settings,backup,tracker)
+            self.assertEqual(outcome["destination"],f.destination)
+
     def test_unsaved_file_rejected(self):
         with tempfile.TemporaryDirectory() as t:
             f,settings,backup,tracker,_=self.fixture(t)
