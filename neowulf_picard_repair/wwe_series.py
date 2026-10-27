@@ -27,6 +27,11 @@ _VOLUMES = re.compile(
     r"(?P<volume>0?[1-9]|10)\b",
     re.IGNORECASE,
 )
+_NEW_DAY = re.compile(
+    r"^\\s*WWE\\s*[:\\-]?\\s*The\\s+Music\\s*:\\s*A\\s+New\\s+Day"
+    r"\\s*,?\\s*Vol(?:ume)?\\.?\\s*10\\s*$",
+    re.IGNORECASE,
+)
 _FULL_METAL = re.compile(
     r"^\s*WWF\s+Full\s+Metal\s*:\s*The\s+Album\s*$",
     re.IGNORECASE,
@@ -56,6 +61,8 @@ def wwe_volume(album: object) -> int | None:
         return None
     if _FULL_METAL.fullmatch(title):
         return 1
+    if _NEW_DAY.fullmatch(title):
+        return 10
     # Avoid "The Music, Vol. 9" nested inside unrelated artist names; only
     # exact known series tokens and not WWE Uncaged, Originals, Tough Enough.
     hit = _VOLUMES.search(title)
