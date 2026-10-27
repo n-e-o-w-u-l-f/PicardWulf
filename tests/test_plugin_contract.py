@@ -84,6 +84,7 @@ class Api:
     def register_cluster_action(self,cls):self.registered.append(('cluster_action',cls))
     def register_album_action(self,cls):self.registered.append(('album_action',cls))
     def register_album_metadata_processor(self,fn,priority):self.registered.append(('processor',fn,priority))
+    def register_script_function(self,fn,**kwargs):self.registered.append(('script_function',fn,kwargs))
     def register_file_post_load_processor(self,fn,priority=0):self.registered.append(('file_event',fn,priority))
     def register_file_post_save_processor(self,fn,priority=0):self.registered.append(('file_saved_event',fn,priority))
     def register_track_metadata_processor(self,fn,priority=0):self.registered.append(('track_event',fn,priority))
@@ -105,6 +106,25 @@ class TestContract(unittest.TestCase):
         self.assertTrue(api.plugin_config['auto_apply_best'])
         self.assertFalse(api.plugin_config['auto_save_with_backup'])
         self.assertEqual(api.global_config.setting['file_renaming_scripts']['a']['script'],before)
+    def test_wwe_native_script_and_read_only_preview_registered(self):
+        api=Api()
+        with patch.object(plugin,'AutoApplyController'),patch.object(plugin,'UniversalAggregator'):
+            plugin.enable(api)
+        functions=[entry for entry in api.registered if entry[0]=='script_function']
+        self.assertEqual(len(functions),1)
+        self.assertEqual(functions[0][2]['name'],'pw_wwe_folder')
+        self.assertEqual(functions[0][1](None,'Voices: WWE The Music Vol. 9','2009'),
+                         'Various Artists/WWE The Music/2009 - WWE The Music Volume 9')
+        action=plugin.WweSeriesPlacementPreview()
+        action.api=api
+        file=types.SimpleNamespace(metadata={'album':'WWF The Music Volume 2',
+              'artist':'Jim Johnston','albumartist':'Various Artists','date':'1997'})
+        action.callback([file])
+        self.assertTrue(FakeMessageBox.messages)
+        text=' '.join(str(x) for x in FakeMessageBox.messages)
+        self.assertIn('WWE The Music Volume 2',text)
+        self.assertIn('Keine Dateien verschoben',text)
+
     def test_auto_save_toggle_refuses_unsafe_native_move(self):
         api=Api()
         api.global_config.setting.update({'rename_files':False,'move_files':True})
