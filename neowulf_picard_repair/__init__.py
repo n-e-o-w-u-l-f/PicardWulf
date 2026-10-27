@@ -74,6 +74,42 @@ def _diag(cfg):
     return scripts, candidates, active, raw_active, enabled_profiles
 
 
+class WweSeriesPlacementPreview(BaseAction):
+    TITLE = 'WWE The Music: Zielordner prüfen (nur lesen)'
+    MENU = ('PicardWulf',)
+
+    def callback(self, objs):
+        """Never changes tags, Picard profiles, or filesystem paths."""
+        from .wwe_series import route_metadata
+        files=list(objs or [])
+        lines=[]
+        for file in files[:20]:
+            md=getattr(file,'metadata',None) or getattr(file,'orig_metadata',None)
+            if md is None:continue
+            get=getattr(md,'get',None)
+            if not callable(get):continue
+            info=route_metadata({
+                key:get(key,'')
+                for key in ('album','artist','albumartist','date','originaldate',
+                            '_secondaryreleasetype')
+            })
+            if info.get('state')=='WWE_SERIES':
+                lines.append(str(info['folder']).replace('/','\\'))
+                if info.get('needs_review'):
+                    lines.append('  Hinweis: Datum/Originaljahr prüfen (abweichende Ausgabe).')
+        if not lines:
+            _show('WWE The Music – Vorschau',
+                  'Keine bekannte WWE-The-Music-Reihe in den ausgewählten '
+                  'Dateien erkannt. Keine Dateien oder Einstellungen geändert.')
+        else:
+            unique=list(dict.fromkeys(lines))
+            _show('WWE The Music – Soll-Zielordner (nur Vorschau)',
+                  '\\n'.join(unique[:24])+
+                  '\\n\\nKeine Dateien verschoben oder umgetaggt. '
+                  'Für die reale Ablage muss das geprüfte Preset-3-Benennungsskript '
+                  'die Funktion $pw_wwe_folder() aufrufen.')
+
+
 class Inspect(BaseAction):
     TITLE = 'Konfiguration prüfen (nur lesen)'
     MENU = ('NEOWULF',)
@@ -795,6 +831,14 @@ def enable(api):
     global _aggregator, _controller, _save_tracker, _gold_controller
     api.register_tools_menu_action(Inspect)
     api.register_tools_menu_action(Repair)
+    # Independent Picard scripting API: registered but NEVER alters Preset 3
+    # until its exact existing script is inspected and safely migrated.
+    from .wwe_series import picard_wwe_folder
+    api.register_script_function(
+        picard_wwe_folder, name='pw_wwe_folder',
+        documentation='WWE/WWF The Music sampler series album folder, read-only.',
+        signature='$pw_wwe_folder(album,date,originaldate)')
+    api.register_file_action(WweSeriesPlacementPreview)
     api.register_album_metadata_processor(_album_guard, priority=-1000)
     api.plugin_config.register_option('auto_apply_best', True)
     api.plugin_config.register_option('auto_save_with_backup', False)
