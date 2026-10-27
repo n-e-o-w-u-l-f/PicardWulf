@@ -13,7 +13,7 @@ import json
 import re
 from typing import Callable, Mapping
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+from urllib.request import Request, build_opener, HTTPRedirectHandler
 
 
 API = 'https://api.mixcloud.com/search/'
@@ -34,9 +34,15 @@ def public_mixcloud_request(query: Mapping[str,str]) -> Mapping:
     from urllib.parse import urlparse
     url = API+'?'+urlencode(dict(query))
     req=Request(url,headers={'Accept':'application/json','User-Agent':'PicardWulf-live-metadata/1.0'})
-    with urlopen(req,timeout=8) as response:
+    class NoRedirect(HTTPRedirectHandler):
+        # urllib normally follows redirects *before* callers can inspect
+        # the new host. Public metadata reads must remain on Mixcloud.
+        def redirect_request(self,req,fp,code,msg,headers,newurl):
+            raise ValueError('provider redirect blocked')
+    opener=build_opener(NoRedirect)
+    with opener.open(req,timeout=8) as response:
         if urlparse(response.geturl()).hostname != 'api.mixcloud.com':
-            raise ValueError('provider redirect to untrusted host')
+            raise ValueError('provider host mismatch')
         if response.status != 200:
             raise ValueError('provider unsuccessful response')
         raw=response.read(_MAX_BODY+1)
