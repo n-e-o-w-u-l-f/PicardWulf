@@ -205,6 +205,103 @@ class WweInventoryTests(unittest.TestCase):
             out=self.audit.scan_library([root],reader=lambda p:{"album":"WWE The Music Vol. 8"})
             self.assertEqual(out["audio_files_scanned"],1)
 
+    def test_tagless_file_under_canonical_year_wwe_album_directory_is_found(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            f=root/"Various Artists"/"WWE The Music"/"2009 - WWE The Music Volume 9"/"01 Voices.flac"
+            f.parent.mkdir(parents=True)
+            f.write_bytes(b"unchanged test bytes")
+            report=self.audit.scan_library([root],reader=lambda _: {})
+            v9=report["by_volume"]["9"]
+            self.assertEqual(report["identified_volumes"],[9])
+            self.assertEqual(report["audio_without_album_tag"],1)
+            self.assertIn(9,report["identified_volumes"])
+            self.assertNotIn(9,report["volumes_not_identified"])
+            self.assertTrue(report["volume_absence_is_not_proven"])
+            self.assertEqual(v9["folder_only_evidence"],1)
+            self.assertEqual(v9["misplaced_candidates"],0)
+            self.assertEqual(v9["observed_directory_count"],1)
+            self.assertEqual(v9["examples"][0]["evidence"],"folder_only")
+            self.assertEqual(f.read_bytes(),b"unchanged test bytes")
+
+    def test_wrong_year_of_canonical_volume_directory_requires_review(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            f=root/"Various Artists"/"WWE The Music"/"2019 - WWE The Music Volume 9"/"01.flac"
+            f.parent.mkdir(parents=True)
+            f.write_bytes(b"never mutate")
+            out=self.audit.scan_library([root],reader=lambda _: {})
+            item=out["by_volume"]["9"]["examples"][0]
+            self.assertEqual(out["by_volume"]["9"]["misplaced_candidates"],1)
+            self.assertEqual(item["evidence"],"folder_only")
+            self.assertTrue(item["year_requires_review"])
+            self.assertEqual(item["expected_album_folder"],
+                str(root/"Various Artists"/"WWE The Music"/"2009 - WWE The Music Volume 9"))
+            self.assertEqual(f.read_bytes(),b"never mutate")
+
+    def test_album_tag_volume_disagreement_with_folder_is_exposed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            f=root/"Various Artists"/"WWE The Music"/"2009 - WWE The Music Volume 9"/"Track.flac"
+            f.parent.mkdir(parents=True)
+            f.write_bytes(b"preserved")
+            out=self.audit.scan_library([root],reader=lambda p:{
+                "album":"WWF The Music Volume 2", "date":"1997",
+                "artist":"Jim Johnston", "albumartist":"Various Artists"})
+            self.assertEqual(out["identified_volumes"],[2])
+            row=out["by_volume"]["2"]["examples"][0]
+            self.assertTrue(row["tag_folder_conflict"])
+            self.assertEqual(row["evidence"],"album_tags")
+            self.assertEqual(out["by_volume"]["2"]["conflicting_evidence"],1)
+            self.assertEqual(f.read_bytes(),b"preserved")
+
+    def test_artist_album_with_credible_artist_tag_but_in_va_folder_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            f=root/"Various Artists"/"Curtain Call 2"/"01 Track.flac"
+            f.parent.mkdir(parents=True)
+            f.write_bytes(b"untouched")
+            out=self.audit.scan_library([root],reader=lambda p:{
+                "album":"Curtain Call 2", "artist":"Eminem",
+                "albumartist":"Eminem", "_secondaryreleasetype":"compilation"})
+            findings=out["artist_albums_in_various_directories"]
+            self.assertEqual(len(findings),1)
+            self.assertEqual(findings[0]["albumartist"],"Eminem")
+            self.assertIn("CHECK_AND_REPAIR_PATH_ONLY",findings[0]["action"])
+            self.assertEqual(f.read_bytes(),b"untouched")
+
+    def test_failed_codec_tag_read_is_incomplete_not_false_clean_inventory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            f=root/"Invalid.flac"
+            f.write_bytes(b"not FLAC bytes")
+            out=self.audit.scan_library([root],reader=lambda _: None)
+            self.assertEqual(out["status"],"READ_ONLY_INCOMPLETE")
+            self.assertEqual(out["audio_files_scanned"],1)
+            self.assertEqual(out["unreadable_metadata"],1)
+            self.assertEqual(out["audio_without_album_tag"],0)
+            self.assertEqual(out["unreadable_examples"],[str(f)])
+            self.assertEqual(out["volumes_not_identified"],list(range(1,11)))
+            self.assertTrue(out["volume_absence_is_not_proven"])
+
+    def test_unavailable_mutagen_does_not_claim_missing_albums(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            (root/"Track.flac").write_bytes(b"synthetic")
+            with self.assertRaises(ImportError):
+                self.audit.scan_library([root],reader=lambda _:(
+                    (_ for _ in ()).throw(ImportError("mutagen missing"))))
+
+    def test_nested_roots_prohibited_to_avoid_double_count(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            nested=root/"Various Artists"; nested.mkdir()
+            (nested/"Track.flac").write_bytes(b"synthetic")
+            with self.assertRaisesRegex(ValueError,"overlapping library roots"):
+                self.audit.scan_library([root,nested],reader=lambda _: {})
+            with self.assertRaisesRegex(ValueError,"overlapping library roots"):
+                self.audit.scan_library([root,root],reader=lambda _: {})
+
     def test_bounded_and_invalid_roots_fail_closed(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)
