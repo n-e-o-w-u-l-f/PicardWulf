@@ -25,7 +25,10 @@ _VOLUMES = re.compile(
     r"^\s*(?:(?:ThemeAddict|Voices)\s*[:\-]\s*)?"
     r"(?:WWF|WWE)\s*[:\-]?\s*The\s+Music\s*"
     r"(?:,|:|\-|\s)*\s*Vol(?:ume)?\.?\s*"
-    r"(?P<volume>0?[1-9]|10)\s*$",
+    r"(?P<volume>0?[1-9]|10)"
+    r"(?:\s*[\[(]\s*(?:Deluxe(?: Edition)?|2-CD Deluxe Edition|"
+    r"Special Edition|Japan(?:ese)? Edition|Remaster(?:ed)?|Disc\s*[12])\s*[\])])?"
+    r"\s*$",
     re.IGNORECASE,
 )
 _NEW_DAY = re.compile(
