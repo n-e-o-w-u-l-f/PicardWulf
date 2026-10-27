@@ -54,5 +54,21 @@ class WweRealFlacInventory(unittest.TestCase):
             self.assertEqual(audio_path.read_bytes(),old_bytes)
 
 
+    def test_corrupt_fake_flac_reports_incomplete_instead_of_missing_albums(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)/"music"
+            root.mkdir()
+            path=root/"broken.flac"
+            data=b"not a valid encoded FLAC stream"
+            path.write_bytes(data)
+            report=audit.scan_library([root])
+            self.assertEqual(report["status"],"READ_ONLY_INCOMPLETE")
+            self.assertEqual(report["unreadable_metadata"],1)
+            self.assertEqual(report["unreadable_examples"],[str(path)])
+            self.assertEqual(report["audio_without_album_tag"],0)
+            self.assertTrue(report["volume_absence_is_not_proven"])
+            self.assertEqual(path.read_bytes(),data)
+
+
 if __name__=="__main__":
     unittest.main()
