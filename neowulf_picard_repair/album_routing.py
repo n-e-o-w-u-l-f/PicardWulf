@@ -52,8 +52,11 @@ def component(raw: object) -> str:
     return val[:130].rstrip(' .')
 
 
-def _year(md: Mapping) -> tuple[str,str]:
-    for field in ('originaldate','date','_releasegroup_firstreleasedate','release_date'):
+def _year(md: Mapping, *, live: bool = False) -> tuple[str,str]:
+    fields = (('event_date','set_date','date','originaldate')
+              if live else
+              ('originaldate','date','_releasegroup_firstreleasedate','release_date'))
+    for field in fields:
         m = _YEAR.match(first(md.get(field)))
         if m:
             year=m.group(1)
@@ -117,20 +120,21 @@ def route_album(metadata: Mapping[str,object]) -> AlbumRoute:
     artist=first(metadata.get('albumartist'))
     if not title or not component(title):
         return AlbumRoute('REVIEW','','missing_or_unsafe_album',True)
-    year,full_date=_year(metadata)
-    if not year:
-        return AlbumRoute('REVIEW','','missing_release_year',True)
     wwe=wwe_folder(title,metadata.get('date'),metadata.get('originaldate'))
     if wwe:
         return AlbumRoute('SAMPLER',wwe.relative_folder,
                           'wwe_original_year_conflict' if wwe.year_conflict else 'wwe_series',
                           wwe.year_conflict)
+    live=_is_live_set(metadata)
+    year,full_date=_year(metadata,live=live)
+    if not year:
+        return AlbumRoute('REVIEW','','missing_release_year',True)
     if not artist or artist.casefold() in _PROVIDER:
         return AlbumRoute('REVIEW','','unverified_albumartist',True)
     if not component(artist):
         return AlbumRoute('REVIEW','','unsafe_artist',True)
     title_folder=component(title)
-    if _is_live_set(metadata):
+    if live:
         # LiveSets are DJs/radio/festival *sets*. Live concerts released as
         # normal live albums stay with artist. Event date if available.
         label=f'{full_date or year} - {title_folder}'
