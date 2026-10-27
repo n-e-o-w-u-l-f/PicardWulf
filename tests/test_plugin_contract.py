@@ -125,6 +125,20 @@ class TestContract(unittest.TestCase):
         self.assertIn('WWE The Music Volume 2',text)
         self.assertIn('Keine Dateien verschoben',text)
 
+    def test_uncertain_va_artist_compilation_warns_without_retagging(self):
+        api=Api()
+        action=plugin.WweSeriesPlacementPreview()
+        action.api=api
+        metadata={'album':'Some Artist Greatest Hits',
+                  'artist':'Nena','albumartist':'Various Artists',
+                  '_secondaryreleasetype':'compilation'}
+        before=dict(metadata)
+        action.callback([types.SimpleNamespace(metadata=metadata)])
+        displayed=' '.join(str(x) for x in FakeMessageBox.messages)
+        self.assertIn('Künstler-Compilation prüfen',displayed)
+        self.assertIn('Keine automatische Korrektur',displayed)
+        self.assertEqual(metadata,before)
+
     def test_auto_save_toggle_refuses_unsafe_native_move(self):
         api=Api()
         api.global_config.setting.update({'rename_files':False,'move_files':True})
