@@ -158,6 +158,84 @@ class Inspect(BaseAction):
             _show('NEOWULF – Prüfung nicht möglich', str(exc), 'warning')
 
 
+class RepairActivePreset3Bmax(BaseAction):
+    TITLE = 'Aktives Preset 3: Musiksortierung reparieren (mit Backup)'
+    MENU = ('NEOWULF',)
+
+    def callback(self, objs):
+        """Only through the running Picard configuration API, never raw ini."""
+        from .preset3_migration import (prepare_active_preset3,
+                                        PresetMigrationRefused)
+        from hashlib import sha256
+
+        cfg=self.api.global_config
+        try:
+            scripts,_,active,_,profiles=_diag(cfg)
+            updated,record=prepare_active_preset3(scripts,active)
+            parser=ScriptParser()
+            # Validate the *complete original* inside a genuine Picard script
+            # function before writing even a temporary configuration setting.
+            parser.parse(updated[active]['script'])
+            if any('$pw_bmax_fullpath' in scripts[k].get('script','')
+                   for k in scripts if k!=active):
+                raise PresetMigrationRefused('Another preset is already patched')
+            message=(
+                'Nur das tatsächlich aktive Skript wird korrigiert:\n'
+                + str(record['title']) + '\n\n'
+                'Änderungen: deutsche Various Artists, Sammlerreihen, '
+                'Kollaborationen, Soundtracks sowie Rolf Zuckowski und Dr. Dre.\n'
+                'Der vollständige ursprüngliche Inhalt bleibt im neuen '
+                'Skript als verschachtelter Ausdruck erhalten; sein '
+                'Dateiname wird weiterhin verwendet.\n\n'
+                'Original SHA-256: '+record['original_sha256'][:20]+'…\n'
+                'Andere Presets und Musikdateien werden nicht verändert.\n'
+                'Vorher wird eine vollständige Picard.ini-Sicherung erstellt.\n'
+                'Bitte die Vorschau nach der Aktivierung prüfen!\n\n'
+                'Aktive Profile: '+str(len(profiles))+'\n'
+                'Preset 3 wirklich jetzt ändern?')
+            if QMessageBox.question(
+                None,'NEOWULF – Preset 3 reparieren',message,
+                QMessageBox.StandardButton.Yes|QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            ) != QMessageBox.StandardButton.Yes:
+                return
+            original_scripts=deepcopy(scripts)
+            original_active=active
+            bak=_backup(cfg)
+            # Hash the independently backed-up source file. It must exist and
+            # contain the synced settings *before* any mutation.
+            origin=_source_ini()
+            if (not bak.is_file() or
+                sha256(bak.read_bytes()).digest()!=sha256(origin.read_bytes()).digest()):
+                raise PresetMigrationRefused(
+                    'Config backup differs from current Picard.ini: no write')
+            try:
+                cfg.setting['file_renaming_scripts']=updated
+                cfg.sync()
+                now=cfg.setting['file_renaming_scripts']
+                if (cfg.setting['active_file_naming_script_id']!=active or
+                    now[active]['script']!=updated[active]['script'] or
+                    any(now[k]!=original_scripts[k] for k in original_scripts if k!=active)):
+                    raise PresetMigrationRefused(
+                        'Picard active preset verification failed')
+            except Exception:
+                cfg.setting['file_renaming_scripts']=original_scripts
+                cfg.setting['active_file_naming_script_id']=original_active
+                cfg.sync()
+                raise
+            _show('NEOWULF – Preset 3 korrigiert',
+                  'Aktives Preset 3 gesichert und korrigiert.\n'
+                  'Backup: '+str(bak)+'\n'
+                  'Vor der ersten Dateioperation unbedingt die '
+                  'Picard-Dateibenennungsvorschau auf den genannten Alben '
+                  'prüfen. KEINE Medien automatisch verschoben.')
+        except Exception as exc:
+            self.api.logger.error('Active Preset 3 repair refused: %s',
+                                  type(exc).__name__)
+            _show('NEOWULF – Preset 3 unverändert / Reparatur nicht bestätigt',
+                  str(exc),'warning')
+
+
 class Repair(BaseAction):
     TITLE = 'VA-Sortierung reparieren (mit Backup)'
     MENU = ('NEOWULF',)
@@ -860,6 +938,7 @@ def enable(api):
     global _aggregator, _controller, _save_tracker, _gold_controller
     api.register_tools_menu_action(Inspect)
     api.register_tools_menu_action(Repair)
+    api.register_tools_menu_action(RepairActivePreset3Bmax)
     # Native Picard scripting functions are optional and NEVER mutate the
     # active file naming preset, user tags or Picard.ini automatically.
     from .wwe_series import picard_wwe_folder
@@ -872,6 +951,15 @@ def enable(api):
         picard_album_folder, name='pw_album_folder',
         documentation='Verified sampler, collaboration, artist, DJ LiveSet album folder.',
         signature='$pw_album_folder(album,albumartist,originaldate,date,secondary,albumartists,collection,volume)')
+    from .bmax_naming import picard_bmax_folder, picard_bmax_fullpath
+    api.register_script_function(
+        picard_bmax_folder, name='pw_bmax_folder',
+        documentation='BMAX verified sampler, soundtrack, collaboration and artist folder.',
+        signature='$pw_bmax_folder(album,albumartist,originaldate,date,release_type,albumartists,collection,volume)')
+    api.register_script_function(
+        picard_bmax_fullpath, name='pw_bmax_fullpath',
+        documentation='Retain original Preset 3 filename, repair only album destination.',
+        signature='$pw_bmax_fullpath(old_path,album,albumartist,originaldate,date,release_type,albumartists,collection,volume)')
     api.register_file_action(WweSeriesPlacementPreview)
     api.register_file_action(LiveSetMetadataSearch)
     api.register_album_metadata_processor(_album_guard, priority=-1000)
