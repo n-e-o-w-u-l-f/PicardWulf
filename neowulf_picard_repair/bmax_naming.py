@@ -120,9 +120,9 @@ def classify_bmax(md: Mapping[str,object]) -> NamingDecision:
             "release_soundtrack_type")
     normalized_artist="Various Artists" if artist.casefold() in VA_NAMES else artist
     # Do not make up a sampler collection from a one-off album title.
-    if normalized_artist=="Various Artists" and not year:
-        return NamingDecision("REVIEW","","va_year_needed",True)
-    if normalized_artist=="Various Artists" and title.casefold().lstrip(". ") in _OTHER_VA:
+    if normalized_artist=="Various Artists" and title.casefold().lstrip(". ") in _OTHER_VA and year:
+        if title.casefold().startswith("... like a raging bull"):
+            clean=title  # Preserve the exact, user-requested ellipsis prefix.
         return NamingDecision("SAMPLER",f"{VA_ROOT}/{year} - {clean}",
                               "verified_oneoff_va_collection")
     # Explicit multiple " x " separators in the *release* albumartist
@@ -153,6 +153,8 @@ def classify_bmax(md: Mapping[str,object]) -> NamingDecision:
         return NamingDecision(route.kind,folder,route.reason)
     # Generic one-off compilation with a verified Various Artists credit:
     # No arbitrary series folder, but never use 'Verschiedene Interpreten'.
+    if normalized_artist=="Various Artists" and not year:
+        return NamingDecision("REVIEW","","va_year_needed",True)
     if normalized_artist=="Various Artists" and year:
         return NamingDecision("SAMPLER",f"{VA_ROOT}/{year} - {clean}",
                               "oneoff_various_artists")
