@@ -98,7 +98,7 @@ def classify(metadata: Mapping[str, object], year: str) -> Correction | None:
         if title in _KNOWN_FLAT:
             from .album_routing import component
             return Correction('SAMPLER',
-                f'{VA_FOLDER}/{year} - {component(album)}',
+                f'{VA_FOLDER}/{year} - {album if title == "... like a raging bull" else component(album)}',
                 'explicit_user_list_individual_sampler', album, 'Various Artists')
     return None
 
