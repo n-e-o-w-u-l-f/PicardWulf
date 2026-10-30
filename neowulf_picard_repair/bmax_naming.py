@@ -75,11 +75,10 @@ def classify_bmax(md: Mapping[str,object]) -> NamingDecision:
     if _ROLF.fullmatch(title):
         if title.casefold().startswith("rolfs liederkalender") or "jahresuhr" in title.casefold():
             clean="Die Jahresuhr"
-        if not year:
-            if clean=="Die Jahresuhr":
-                year="2001"  # Explicit user-provided copy: 2001
-            else:
-                return NamingDecision("REVIEW","","rolf_year_needed",True)
+        if clean=="Die Jahresuhr":
+            year="2001"  # User's actual physical copy, not early master release
+        elif not year:
+            return NamingDecision("REVIEW","","rolf_year_needed",True)
         return NamingDecision("ARTIST",f"Rolf Zuckowski/{year} - {clean}","known_rolf_release")
     if _DR_DRE.fullmatch(title):
         return NamingDecision("ARTIST",f"Dr. Dre/{year or '2003'} - Dr. Dre & Friends",
@@ -97,14 +96,14 @@ def classify_bmax(md: Mapping[str,object]) -> NamingDecision:
     m=_NORDIC.fullmatch(title)
     if m and artist.casefold() in VA_NAMES:
         n=m.group('n')
-        year=year or "1996"
+        year="1996"  # All three confirmed physical series releases
         album_name=f"Nordic Rave {int(n)}" if n else "Nordic Rave"
         return NamingDecision("SAMPLER",
             f"{VA_ROOT}/Nordic Rave/{year} - {album_name}",
             "verified_nordic_rave_series")
     m=_ENZYME.fullmatch(title)
     if m and artist.casefold() in VA_NAMES:
-        year=year or ("2003" if m.group('n') == "2" else "")
+        year=("2003" if m.group('n') == "2" else year)
         if not year:
             return NamingDecision("REVIEW","","enzyme_year_needed",True)
         album_name=f"Enzyme Injection Part {int(m.group('n'))}"
@@ -126,6 +125,14 @@ def classify_bmax(md: Mapping[str,object]) -> NamingDecision:
     if normalized_artist=="Various Artists" and title.casefold().lstrip(". ") in _OTHER_VA:
         return NamingDecision("SAMPLER",f"{VA_ROOT}/{year} - {clean}",
                               "verified_oneoff_va_collection")
+    # Explicit multiple " x " separators in the *release* albumartist
+    # are collaboration evidence. Do not split W&W or other fixed '&' names.
+    if artist and len(_MULTI_X.split(artist))>=3:
+        if not year:
+            return NamingDecision("REVIEW","","collab_year_needed",True)
+        return NamingDecision("COLLABORATION",
+            f"{COLLAB_ROOT}/{component(artist)}/{year} - {clean}",
+            "explicit_collaboration_x_credit")
     # Keep existing deterministic four-way logic for WWE, DJ sets, and
     # explicitly release-credited collaborations.
     payload=dict(md)
@@ -149,13 +156,6 @@ def classify_bmax(md: Mapping[str,object]) -> NamingDecision:
     if normalized_artist=="Various Artists" and year:
         return NamingDecision("SAMPLER",f"{VA_ROOT}/{year} - {clean}",
                               "oneoff_various_artists")
-    # A collaboration in the *release-level albumartist* credited with
-    # explicit ' x ' separators is strong enough when not a fixed band name.
-    if artist and len(_MULTI_X.split(artist)) >= 3:
-        if not year:return NamingDecision("REVIEW","","collab_year_needed",True)
-        return NamingDecision("COLLABORATION",
-            f"{COLLAB_ROOT}/{component(artist)}/{year} - {clean}",
-            "explicit_collaboration_x_credit")
     return NamingDecision("REVIEW","","insufficient_release_evidence",True)
 
 
