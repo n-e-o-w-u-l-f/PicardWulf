@@ -10,6 +10,14 @@
 
 > **Status:** Entwicklungsversion. Lokale Tests erfolgreich; Installation, Plugin-Aktivierung, Live-APIs und das Speichern auf BMAX-B6 sind noch nicht vollständig praktisch verifiziert.
 
+## Neue Ablagekategorien und LiveSet-Metadaten (Entwicklungsstand)
+
+PicardWulf unterscheidet künftig Release-Sampler, echte albumweite Kollaborationen, Künstleralben und DJ-/Radio-LiveSets. Die Zielordner werden unabhängig von der alten „Compilation = Various Artists“-Fehlannahme bewertet. Bei unsicheren Metadaten wird keine neue Zielablage erfunden. Der sichere FLAC-Import nutzt vollständig geprüfte Kategorien unter Beibehaltung des Preset-3-Trackdateinamens.
+
+Eine ausschließlich mit Zustimmung angestoßene **Mixcloud-Metadatensuche** kann LiveSet-/DJ-/Showtitel samt Quellen-URL als Vorschlag zurückgeben. Das Upload-Datum gilt **nicht** als belegter Auftrittstermin. Kein automatisches Scraping von Webseiten oder Medien-Downloads, keine automatisch geschriebenen Tags.
+
+[**Vollständige 4-Wege-Ablagestruktur, Picard-Skriptfunktion und LiveSet-Quellensuche**](docs/planning/FOUR-WAY-ALBUM-ROUTING-LIVESETS-20261027.md). Der produktive Einsatz bleibt bis zur vollständigen Qt-/Windows-Abnahme gesperrt; Picard.ini, Preset 3 und Originalmusik werden nicht verändert.
+
 ## Funktionen
 
 - **Alle Quellen gemeinsam bewerten:** MusicBrainz, Deezer, Apple/iTunes sowie Spotify, SoundCloud und Last.fm mit vorhandenen API-Berechtigungen.
@@ -63,6 +71,12 @@ Siehe [Anbieterzugänge, Freigabegrenzen und sicherer BMAX-Rollout](docs/plannin
 ## Architekturprüfung und nächster Schritt für v1.0
 
 Die Zielversion bleibt **v1.0**. Die geprüften Risiken und die vor der Freigabe notwendigen Arbeiten sind im [technischen Forschungsbericht](docs/research/PICARDWULF-V1.0-DEEP-RESEARCH-2026-10-14.md) und im [verbindlichen Ausführungsplan](docs/planning/V1.0-NEXT-EXECUTION.md) festgehalten. Zuerst wird die SQLite-Warteschlange vollständig entkoppelt und dauerhaft abgesichert. Diese Recherche hat den laufenden BMAX-Picard nicht verändert.
+
+## Picard 3 – Größenregel und Dateikollisionen (Entwicklung)
+
+Im Kontextmenü ausgewählter Dateien steht im Entwicklungsbranch die **„PicardWulf: Dateikollisionen / FLAC-Größenregel prüfen (nur lesen)“**-Aktion bereit. Die Vorschau ermittelt den vorgesehenen Zielnamen aus den **tatsächlich aktiven Picard-Dateibenennungsoptionen (einschließlich Preset 3)** und vergleicht vorhandene mit eingehenden FLAC-Dateien anhand echter Metadaten, Laufzeit und Größe. Die Prüfung läuft im Hintergrund und verändert **keine** Musikdateien.
+
+**Die Größenentscheidung ist derzeit nur eine Vorschau, keine automatische Dateiersetzung.** Picards interne Umbenennungsfunktion lässt sich über den dokumentierten Plugin-Hook vor dem Speichern nicht zuverlässig stoppen. Bei aktivierter Picard-Option **„Vorhandene Dateien beim Verschieben überschreiben“** kann Picard eigenständig Dateien überschreiben, auch wenn die PicardWulf-Größenregel zum Behalten geraten hätte. Diese Option deshalb vor einem praktischen Test deaktivieren. Die BMAX-Live-Abnahme und Integration einer belastbaren automatischen Kollisionsbehandlung bleiben offen; weder Installation noch Freigabe des Entwicklungsbranches sind damit erfolgt.
 
 ## Sicherheit und Grenzen
 

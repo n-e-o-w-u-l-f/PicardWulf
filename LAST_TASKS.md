@@ -1,6 +1,59 @@
 # LAST_TASKS — PicardWulf
 
-Updated: 2026-10-14 · Project: `n-e-o-w-u-l-f/PicardWulf`
+Updated: 2026-10-27 · Project: `n-e-o-w-u-l-f/PicardWulf`
+
+## 2026-10-17 · Native Save Guard und echter FLAC-Rollback
+
+- Nach fehlgeschlagener Post-Commit-SHA-256- oder Decoderprüfung wird die vorherige FLAC jetzt **tatsächlich** aus dem separaten Backup wiederhergestellt; fehlerhafte Wiederherstellung bleibt explizit UNVERIFIED.
+- PicardWulf-eigene Auto-/manuelle `File.save()` erfordern `rename_files=False` und `move_files=False`; Toggle verweigert risikoreiche Aktivierung ohne Änderung an Picard.ini/Preset 3.
+- **4-Wege-Router**: Sampler/Kollaborationen/Künstler/LiveSets; Mixcloud-Lookup nur mit Zustimmung, FLAC-Import gesichert. [Konzept](docs/planning/FOUR-WAY-ALBUM-ROUTING-LIVESETS-20261027.md). **403 Tests OK (2 Skips) vor letztem GUI-Patch; neuer Gesamttest blockiert. BMAX/Strg+S OFFEN.** PR #1 DRAFT.
+
+## 2026-10-17 · Picard-Dateiaktion und BMAX-Audit
+
+- **PLUGIN-REGISTERED / LEGION-TESTED**: `SafeStagedFlacImport` im Picard-Dateimenü, aktives Preset-3-Ziel, zweistufige Nutzerbestätigung, FLAC-Größenregel, Backup; neue Serienordner mit Leerordner-Rollback. **318 Tests PASS**, Head `5a84068df0714ae9bebe351d0346e5fbd9d8a7e8`.
+- **OPEN**: Normales `Strg+S` nicht abgefangen; BMAX-Peer/SSH-Port erreichbar, aber `megal`-Login nicht bestätigt (Legion sentinelx ohne SSH-Agent/Key; RDC 0%). Kein Live-Deploy. [Plan](docs/planning/PICARD3-SAVE-INTEGRATION-20261017.md).
+
+## 2026-10-17 · Gold-CD-Skalierung und strenge Tagprüfung
+
+- SOURCE-ONLY: Gold-Controller liest höchstens 100 Alben je Timer-Durchlauf, ohne sämtliche Alben zu kopieren; Änderungen an der Registry führen zum kontrollierten Iterator-Neustart.
+- Picards eigene Option `remove_complete_albums_after_save` muss nachweislich **False** sein, sonst bleibt die PicardWulf-Goldentfernung gesperrt. Erneute Kontrolle vor Qt-Retirement; `Tag-Speicherstatus` zeigt GESPERRT/NICHT GESTARTET/AKTIV. Picards native frühere Entfernung ist damit nicht automatisch deaktiviert; BMAX-Einstellung und Laufzeit bleiben OPEN.
+- Picard `Metadata.getall()` statt `get()` für alle Mehrfachwerte; zusätzliche Release-/Genre-/ISRC-Tags gegen Originalmetadaten und echte FLAC-Disk-Tags prüfen. Unterschiedlicher zweiter Tag-Wert oder entfernte Album-ID blockiert die UI-Entfernung.
+- **304 Tests PASS** auf Legion, `compileall`/Git-Diff PASS, Code-HEAD `6c6c015d1d30097553bf6cbd7e86c2f5a9fd1c9b`. Kein Windows-Deployment, keine Originalmusik verändert. PR #1 DRAFT. [Evidence](docs/planning/PICARD3-RETENTION-GATES-2026-10-17.md).
+
+## 2026-10-17 · Staged FLAC actual arbitration (without native Picard hook)
+
+- **IMPLEMENTED SOURCE-ONLY** `neowulf_picard_repair/staged_flac_import.py`: offline `import_staged_flac` default `apply=False`, explicit `apply=True`; verified `WOULD_REPLACE/SKIP/CREATE` → `REPLACED/SKIPPED/CREATED`. Independent staging, library and recovery roots; full FLAC decoder; source retained; SHA-256 verified backup of replaced target; atomic replace/exclusive new target; fail-closed locks, invalid identity and symlink/inode conflicts. No MP3 or staging-source deletion.
+- Retention identity tightened for opposing `musicbrainz_albumid`, `musicbrainz_recordingid`, ISRC, barcode, date, albumartist and release status (including one-sided evidence); unequal editions now abstain from collision replacement and MP3 cleanup.
+- **TESTED:** 294 local Python regressions, `compileall`, `git diff --check` PASS on a fresh Legion source checkout `18387d6486730455db9d0af1b7588f7f903bc33b`. Includes disposable real FLAC stream generation and byte-comparison, plus stale lock and concurrent destination tests. Initial installer integrity test correctly caught missing new module and was repaired.
+- **EXTERNAL BLOCKER:** a separate standalone CLI entrypoint write to `scripts/picardwulf_staged_flac.py` was denied by a generic OpenAI security check; independent readback returned 404 (not published). Do not retry an equivalent write by altered payload/transport. Source importer and tests remain published.
+- **OPEN:** Native Picard save collision hook still cannot be vetoed using documented public API. The new importer is a separately callable source function, not registered for automatic use or BMAX deployed. Windows file locks/Hardlinks/Picard session and recovery have NOT been verified; installed Preset 3 and all original music remain untouched. PR #1 DRAFT. [Evidence and constraints](docs/planning/STAGED-FLAC-IMPORT-2026-10-17.md).
+
+## 2026-10-17 · Picard 3 native filename-collision advisory
+
+- REQUEST CONTINUATION: automatic overwrite of smaller verified FLAC, skip existing larger/equal FLAC, FLAC-only, UI-only gold retirement. This checkpoint advances the **native destination-path discovery**, not the fully automatic collision rewrite.
+- Picard upstream `release-3.0.0rc4` verified: `File.save()` invokes a pre-save callback (no documented cancellation or destination redirect), then asynchronously saves tags and calls `_rename()` with `File.make_filename()`. When `move_overwrite_existing_files` is false, Picard uses an available new filename instead of replacing; when true, native overwrite bypasses PicardWulf's size rule. Therefore an unattended plugin monkey-patch or forged "done" claim is forbidden.
+- New `collision_preview.py` provides an **action on selected files** `PicardWulf: Dateikollisionen / FLAC-Größenregel prüfen (nur lesen)`. Uses the real active Picard naming format/preset 3 to calculate destination on GUI, compares at most 20 FLAC candidates on worker for matching track identity/duration/size, and warns of global native overwrites, symlink risks and mismatches. Never moves/copies/unlinks or changes config.
+- `__init__.py` registers the new read-only file action and cleans its Qt timer on plugin disable; Windows installer inventories the module. Added 18 isolation tests (including missing target directories); **276 Python tests PASS on Legion** at source HEAD `38eff80f78fd50dd2992a579c437cd4af019830d`, `compileall` and `git diff --check` PASS.
+- **OPEN:** No supported native Picard save-veto plugin API; automatic skip/replace is NOT yet wired, BMAX live runtime/active preset still unverified, and real Qt/Windows collision tests not executed. User music and running Picard were untouched; PR #1 DRAFT. [Full scope](docs/planning/PICARD3-RETENTION-GATES-2026-10-17.md).
+
+## 2026-10-17 · Picard 3 / retention policy source checkpoint
+
+- USER GOAL: larger validated FLAC wins duplicate conflict; existing equal/larger wins otherwise; remove only verified redundant MP3; remove finished gold albums only from Picard UI.
+- STATUS: **PARTIAL / SOURCE-ONLY**, on feature branch `feature/picard3-retention-policy-20261017`. No Picard runtime or actual music was modified.
+- Added `retention_policy.py`, nine synthetic policy tests and one generated real-audio integration test. Scoped, SHA-256-backup-preserving duplicate-replacement primitive exists but **is not connected to Picard's actual destination collision path**.
+- Added PicardWulf-specific post-save callback that runs only after verified tag readback; same-stem verified FLAC/MP3 comparison, full FLAC decoder requirement and independent MP3 backup precede potential unlink. Missing/invalid evidence aborts without deletion. On BMAX this is **not deployed** and `flac` binary availability is not known.
+- Fixed discovered installer inventory regression; fresh Legion clone test suite **240 tests PASS**, including disposable real FLAC/MP3 encoded-stream acceptance, plus `compileall` PASS at `bc2e2d3c18f8cc39613703d7520aaa3caf9ab00f`. Following documentation commit has no code changes.
+- Picard 3 native General setting `remove_complete_albums_after_save` is documented; **not yet enabled/tested on BMAX**, and its native complete/saved check is not independent PicardWulf zero-discrepancy verification.
+- Acceptance gates and missing runtime evidence: [Picard 3 retention plan](docs/planning/PICARD3-RETENTION-GATES-2026-10-17.md). NEXT: implement collision interception + strict UI gold cleanup; then disposable real-file BMAX tests, review, merge and deployment. Target version remains **v1.0**.
+
+## 2026-10-17 · Strict gold-CD UI retirement continuation
+
+- STATUS: **SOURCE IMPLEMENTED / SYNTHETIC VERIFIED / BMAX NOT DEPLOYED**. Built on the existing retention draft PR #1; source code remains on `feature/picard3-retention-policy-20261017`. Main and the active Windows Picard/preset 3 are untouched.
+- Picard 3.0.0rc4 native auto-remove happens in its post-save hook, potentially before PicardWulf's asynchronous independent readback. Strict mode therefore needs its own delayed Qt GUI retirement and requires the built-in auto-remove setting to be OFF during live acceptance; no silent Picard.ini change was made.
+- New `gold_retirement.py`: checks every track mapped and saved, all actual files FLAC, no errors/review mismatches, on-disk FLAC tags independently verified on a worker. Qt queued completion rechecks album/SaveTracker state before **UI-only** `panel.remove([album])`. Bounded rotation across albums and 60-second retry; zero disk writes by this controller.
+- `SaveTracker` now records bounded per-path `PENDING/VERIFIED/MISMATCH/UNKNOWN_TIMEOUT` and exposes in-flight state. Installer inventory includes new plugin module. Fake-Qt race tests, negative matching cases and generated real-FLAC tag checks added.
+- **PASS:** independent fresh Legion checkout at `ce9e3f4721ca651b13e8460541198f461ab44558`; 258 Python tests, compileall and git diff --check; recovered test-harness `NameError` by fixing class-scope fixture, no app-code rollback needed. [Scope and evidence](docs/planning/PICARD3-RETENTION-GATES-2026-10-17.md).
+- **OPEN:** native file destination collision interception (Picard's public pre-save plugin hook cannot safely cancel/redirect a native rename); actual BMAX interactive Picard 3 execution, Qt integration, native setting, Windows locks/FLAC decoder and disposable-media retention tests. MP3 cleanup remains limited to verified same-stem partners following PicardWulf save. Do not merge, tag, deploy or delete client media yet. Keep PR DRAFT.
 
 ## Fixed target version
 

@@ -26,6 +26,13 @@ class FakeMessageBox:
     def warning(cls, *args):
         cls.messages.append(('warn', args))
 widgets.QMessageBox = FakeMessageBox
+class FakeFolderPicker:
+    folder = ''
+    @classmethod
+    def getExistingDirectory(cls, *args):
+        return cls.folder
+widgets.QFileDialog = FakeFolderPicker
+
 qt.QtWidgets = widgets
 
 picard = types.ModuleType('picard')
@@ -77,6 +84,7 @@ class Api:
     def register_cluster_action(self,cls):self.registered.append(('cluster_action',cls))
     def register_album_action(self,cls):self.registered.append(('album_action',cls))
     def register_album_metadata_processor(self,fn,priority):self.registered.append(('processor',fn,priority))
+    def register_script_function(self,fn,**kwargs):self.registered.append(('script_function',fn,kwargs))
     def register_file_post_load_processor(self,fn,priority=0):self.registered.append(('file_event',fn,priority))
     def register_file_post_save_processor(self,fn,priority=0):self.registered.append(('file_saved_event',fn,priority))
     def register_track_metadata_processor(self,fn,priority=0):self.registered.append(('track_event',fn,priority))
@@ -86,16 +94,137 @@ class TestContract(unittest.TestCase):
     def setUp(self):
         FakeMessageBox.answer=FakeMessageBox.StandardButton.No
         FakeMessageBox.messages.clear()
+        FakeFolderPicker.folder = ''
     def test_enable_registers_no_mutations(self):
         api=Api()
         before=api.global_config.setting['file_renaming_scripts']['a']['script']
         with patch.object(plugin,'AutoApplyController'), patch.object(plugin,'UniversalAggregator'):
             plugin.enable(api)
-        self.assertEqual(len(api.registered),20)
+        self.assertEqual(len(api.registered),27)
+        self.assertEqual(len([x for x in api.registered if x[0]=='file_action']),5)
         self.assertEqual(sum(x[0]=='file_saved_event' for x in api.registered),1)
         self.assertTrue(api.plugin_config['auto_apply_best'])
         self.assertFalse(api.plugin_config['auto_save_with_backup'])
         self.assertEqual(api.global_config.setting['file_renaming_scripts']['a']['script'],before)
+    def test_wwe_native_script_and_read_only_preview_registered(self):
+        api=Api()
+        with patch.object(plugin,'AutoApplyController'),patch.object(plugin,'UniversalAggregator'):
+            plugin.enable(api)
+        functions=[entry for entry in api.registered if entry[0]=='script_function']
+        self.assertEqual(len(functions),2)
+        self.assertEqual(functions[0][2]['name'],'pw_wwe_folder')
+        self.assertEqual(functions[0][1](None,'Voices: WWE The Music Vol. 9','2009'),
+                         'Various Artists/WWE The Music/2009 - WWE The Music Volume 9')
+        action=plugin.WweSeriesPlacementPreview()
+        action.api=api
+        file=types.SimpleNamespace(metadata={'album':'WWF The Music Volume 2',
+              'artist':'Jim Johnston','albumartist':'Various Artists','date':'1997'})
+        action.callback([file])
+        self.assertTrue(FakeMessageBox.messages)
+        text=' '.join(str(x) for x in FakeMessageBox.messages)
+        self.assertIn('WWE The Music Volume 2',text)
+        self.assertIn('Keine Dateien verschoben',text)
+
+    def test_liveset_metadata_gui_action_registered_and_requires_explicit_search(self):
+        api=Api()
+        with patch.object(plugin,'AutoApplyController'),patch.object(plugin,'UniversalAggregator'):
+            plugin.enable(api)
+        actions=[entry[1] for entry in api.registered if entry[0]=='file_action']
+        self.assertIn(plugin.LiveSetMetadataSearch,actions)
+        item=types.SimpleNamespace(metadata={
+            'album':'Boiler Room DJ Set','albumartist':'DJ Example'})
+        button=plugin.LiveSetMetadataSearch()
+        button.api=api
+        from neowulf_picard_repair import liveset_ui
+        with patch.object(liveset_ui,'show_liveset_lookup',return_value=False) as action:
+            self.assertFalse(button.callback([item]))
+            action.assert_called_once_with(api,[item])
+
+    def test_four_way_script_and_selected_file_preview_are_registered(self):
+        api=Api()
+        with patch.object(plugin,'AutoApplyController'),patch.object(plugin,'UniversalAggregator'):
+            plugin.enable(api)
+        functions={entry[2]['name']:entry[1]
+                   for entry in api.registered if entry[0]=='script_function'}
+        self.assertIn('pw_album_folder',functions)
+        folder=functions['pw_album_folder'](
+            None,'Joint Album','Alpha, Beta & Gamma','2023','','',
+            'Alpha;Beta;Gamma')
+        self.assertEqual(folder,
+            'Collaborations/Alpha, Beta & Gamma/2023 - Joint Album')
+        self.assertEqual(functions['pw_album_folder'](
+            None,'Curtain Call 2','Eminem','2022'),
+            'Eminem/2022 - Curtain Call 2')
+        action=plugin.WweSeriesPlacementPreview()
+        action.api=api
+        metadata={'album':'Boiler Room DJ Set','albumartist':'DJ Example',
+                  'event_date':'2025-07-19','set_type':'dj-set'}
+        unchanged=dict(metadata)
+        action.callback([types.SimpleNamespace(metadata=metadata)])
+        rendered=' '.join(str(v) for v in FakeMessageBox.messages)
+        self.assertIn('LiveSets',rendered)
+        self.assertIn('Keine Dateien verschoben',rendered)
+        self.assertEqual(metadata,unchanged)
+
+    def test_uncertain_va_artist_compilation_warns_without_retagging(self):
+        api=Api()
+        action=plugin.WweSeriesPlacementPreview()
+        action.api=api
+        metadata={'album':'Some Artist Greatest Hits',
+                  'artist':'Nena','albumartist':'Various Artists',
+                  '_secondaryreleasetype':'compilation'}
+        before=dict(metadata)
+        action.callback([types.SimpleNamespace(metadata=metadata)])
+        displayed=' '.join(str(x) for x in FakeMessageBox.messages)
+        self.assertIn('Künstler-Compilation prüfen',displayed)
+        self.assertIn('Keine automatische Korrektur',displayed)
+        self.assertEqual(metadata,before)
+
+    def test_auto_save_toggle_refuses_unsafe_native_move(self):
+        api=Api()
+        api.global_config.setting.update({'rename_files':False,'move_files':True})
+        action=plugin.AutoSaveToggle()
+        action.api=api
+        FakeMessageBox.answer=FakeMessageBox.StandardButton.Yes
+        action.callback([])
+        self.assertFalse(api.plugin_config.get('auto_save_with_backup',False))
+        self.assertTrue(any(
+            entry[0]=='warn' and 'Umbenennen' in str(entry[1])
+            for entry in FakeMessageBox.messages))
+
+    def test_auto_save_toggle_allows_tag_only_mode(self):
+        api=Api()
+        api.global_config.setting.update({'rename_files':False,'move_files':False})
+        action=plugin.AutoSaveToggle()
+        action.api=api
+        FakeMessageBox.answer=FakeMessageBox.StandardButton.Yes
+        action.callback([])
+        self.assertTrue(api.plugin_config.get('auto_save_with_backup',False))
+
+    def test_gold_status_exposes_native_early_retirement_warning(self):
+        api=Api()
+        api.global_config.setting['remove_complete_albums_after_save']=True
+        with patch.object(plugin,'AutoApplyController'), patch.object(plugin,'UniversalAggregator'):
+            plugin.enable(api)
+        action=plugin.TagSaveStatus()
+        action.api=api
+        action.callback([])
+        text=' '.join(str(x) for x in FakeMessageBox.messages)
+        self.assertIn('GESPERRT',text)
+        self.assertIn('PicardWulf-Prüfung',text)
+
+    def test_gold_status_does_not_claim_active_without_controller(self):
+        api=Api()
+        api.global_config.setting['remove_complete_albums_after_save']=False
+        with patch.object(plugin,'AutoApplyController'), patch.object(plugin,'UniversalAggregator'):
+            plugin.enable(api)
+        action=plugin.TagSaveStatus()
+        action.api=api
+        action.callback([])
+        text=' '.join(str(x) for x in FakeMessageBox.messages)
+        self.assertIn('NICHT GESTARTET',text)
+        self.assertNotIn('GESPERRT',text)
+
     def test_picard_v3_post_save_hook_dispatches_to_tracker(self):
         api=Api()
         with patch.object(plugin,'AutoApplyController'), patch.object(plugin,'UniversalAggregator'):
@@ -106,6 +235,117 @@ class TestContract(unittest.TestCase):
         with patch.object(plugin._save_tracker,'post_save',return_value=True) as saved:
             events[0][1](api,witness)
         saved.assert_called_once_with(witness)
+
+    def test_native_core_policy_is_not_silently_enabled_in_stock_picard(self):
+        api=Api()
+        with patch.object(plugin,'AutoApplyController'), patch.object(plugin,'UniversalAggregator'):
+            plugin.enable(api)
+        self.assertFalse(api.plugin_config['native_move_auto'])
+        self.assertEqual(api.plugin_config['native_recovery_root'],'')
+        tool=plugin.NativeMoveSafetyToggle()
+        tool.api=api
+        tool.callback([])
+        self.assertFalse(api.plugin_config['native_move_auto'])
+        self.assertTrue(any(x[0]=='warn' for x in FakeMessageBox.messages))
+
+    def test_patched_picard_core_can_register_disabled_native_policy(self):
+        api=Api()
+        registered=[]
+        api.register_file_move_collision_processor=lambda fn,prepare:registered.append((fn,prepare))
+        with patch.object(plugin,'AutoApplyController'), patch.object(plugin,'UniversalAggregator'):
+            plugin.enable(api)
+        self.assertEqual(registered,[(plugin._native_move_collision,plugin._native_move_prepare)])
+        self.assertEqual(
+            registered[0][0](api,'x.flac','y.flac',{},False,registered[0][1](api)),
+            {'action':'UNHANDLED'})
+        # No real music touched. Enabling the feature is a separate user
+        # confirmation and version-specific runtime acceptance.
+        self.assertFalse(api.plugin_config['native_move_auto'])
+
+    def test_native_core_policy_opt_in_requires_separate_recovery(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root=pathlib.Path(tmp)
+            lib=root/'library'; recovery=root/'recovery'
+            lib.mkdir(); recovery.mkdir()
+            api=Api()
+            callbacks=[]
+            api.register_file_move_collision_processor=lambda fn,prepare:callbacks.append((fn,prepare))
+            api.global_config.setting.update({
+                'move_files':True,
+                'move_files_to':str(lib),
+                'move_overwrite_existing_files':False,
+            })
+            with patch.object(plugin,'AutoApplyController'),patch.object(plugin,'UniversalAggregator'):
+                plugin.enable(api)
+            self.assertEqual(callbacks,[(plugin._native_move_collision,plugin._native_move_prepare)])
+            FakeFolderPicker.folder=str(recovery)
+            FakeMessageBox.answer=FakeMessageBox.StandardButton.Yes
+            action=plugin.NativeMoveSafetyToggle()
+            action.api=api
+            action.callback([])
+            self.assertTrue(api.plugin_config['native_move_auto'])
+            self.assertEqual(api.plugin_config['native_recovery_root'],str(recovery))
+            from neowulf_picard_repair import native_move_bridge
+            with patch.object(native_move_bridge,'arbitrate_native_flac_move',
+                              return_value={'action':'KEEP'}) as bridge:
+                out=callbacks[0][0](api,'staging.flac','library.flac',
+                                    {'move_files':True},True,callbacks[0][1](api))
+            self.assertEqual(out,{'action':'KEEP'})
+            bridge.assert_called_once()
+            self.assertEqual(bridge.call_args.kwargs['destination_loaded'],True)
+            queued_policy = callbacks[0][1](api)
+            self.assertEqual(queued_policy,(True,str(recovery)))
+            action.callback([])
+            self.assertFalse(api.plugin_config['native_move_auto'])
+            self.assertEqual(callbacks[0][0](api,'a.flac','b.flac',{},False,
+                                                  callbacks[0][1](api)),
+                             {'action':'UNHANDLED'})
+            # A save already queued with a GUI-thread immutable snapshot
+            # cannot silently switch policy midworker if a user toggles it.
+            with patch.object(native_move_bridge,'arbitrate_native_flac_move',
+                              return_value={'action':'KEEP'}) as copied:
+                self.assertEqual(callbacks[0][0](api,'a.flac','b.flac',{},
+                                                  False,queued_policy),
+                                 {'action':'KEEP'})
+                copied.assert_called_once()
+
+    def test_native_collision_opt_in_rejects_backup_nested_in_library(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            library=pathlib.Path(tmp)/'library'
+            recovery=library/'recovery'
+            recovery.mkdir(parents=True)
+            api=Api()
+            api.register_file_move_collision_processor=lambda fn,prepare:None
+            api.global_config.setting.update({
+                'move_files':True,
+                'move_files_to':str(library),
+                'move_overwrite_existing_files':False,
+            })
+            FakeFolderPicker.folder=str(recovery)
+            FakeMessageBox.answer=FakeMessageBox.StandardButton.Yes
+            action=plugin.NativeMoveSafetyToggle()
+            action.api=api
+            action.callback([])
+            self.assertFalse(api.plugin_config.get('native_move_auto',False))
+            self.assertTrue(any(kind=='warn' for kind,_ in FakeMessageBox.messages))
+
+    def test_safe_import_file_action_dispatches_selected_files_and_tracker(self):
+        api=Api()
+        with patch.object(plugin,'AutoApplyController'), patch.object(plugin,'UniversalAggregator'):
+            plugin.enable(api)
+        actions=[item[1] for item in api.registered if item[0]=='file_action']
+        matches=[cls for cls in actions if cls.TITLE.startswith(
+            'PicardWulf: FLAC sicher in Musikbibliothek')]
+        self.assertEqual(len(matches),1)
+        action=matches[0]()
+        action.api=api
+        from neowulf_picard_repair import picard_safe_import
+        files=[object()]
+        with patch.object(picard_safe_import,'show_safe_import',return_value=True) as dispatched:
+            action.callback(files)
+        dispatched.assert_called_once_with(api,files,plugin._save_tracker)
 
     def test_context_menu_registers_album_and_cluster_multisource_action(self):
         api=Api()

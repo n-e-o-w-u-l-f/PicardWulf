@@ -74,6 +74,71 @@ def _diag(cfg):
     return scripts, candidates, active, raw_active, enabled_profiles
 
 
+class LiveSetMetadataSearch(BaseAction):
+    TITLE = 'LiveSets: Mixcloud-Metadaten suchen (nur lesen)'
+    MENU = ('PicardWulf',)
+
+    def callback(self, objs):
+        from .liveset_ui import show_liveset_lookup
+        return show_liveset_lookup(self.api, objs)
+
+
+class WweSeriesPlacementPreview(BaseAction):
+    TITLE = 'Ablage prüfen: Sampler, Kollaborationen, Künstler, LiveSets (nur lesen)'
+    MENU = ('PicardWulf',)
+
+    def callback(self, objs):
+        """Never changes tags, Picard profiles, or filesystem paths."""
+        from .wwe_series import route_metadata
+        from .album_routing import route_album
+        files=list(objs or [])
+        lines=[]
+        for file in files[:20]:
+            md=getattr(file,'metadata',None) or getattr(file,'orig_metadata',None)
+            if md is None:continue
+            get=getattr(md,'get',None)
+            if not callable(get):continue
+            snapshot={key:get(key,'') for key in (
+                'album','artist','albumartist','date','originaldate',
+                'event_date','set_date','_secondaryreleasetype','set_type',
+                'is_liveset','sampler_collection','sampler_volume')}
+            getall=getattr(md,'getall',None)
+            if callable(getall):
+                snapshot['albumartists']=(getall('albumartists') or
+                                          getall('_albumartists'))
+            else:
+                snapshot['albumartists']=get('albumartists',())
+            info=route_metadata(snapshot)
+            decision=route_album(snapshot)
+            if decision.folder:
+                lines.append(str(decision.folder).replace('/','\\'))
+                if decision.review:
+                    lines.append('  Prüfhinweis: ' + decision.reason)
+            elif decision.review:
+                lines.append('Ablage prüfen: ' + str(get('album',''))
+                             + ' – ' + decision.reason
+                             + ' (keine automatische Korrektur).')
+            if info.get('state')=='VA_OR_REVIEW' and info.get('needs_review'):
+                lines.append(
+                    'Künstler-Compilation prüfen: '
+                    + str(get('album',''))
+                    + ' – Albumartist steht auf Various Artists; '
+                    + 'der Titelinterpret allein beweist keinen Solo-Release. '
+                    + 'Keine automatische Korrektur.')
+        if not lines:
+            _show('WWE The Music – Vorschau',
+                  'Keine bekannte WWE-The-Music-Reihe oder verdächtige Künstler-'
+                  'Compilation in den ausgewählten Dateien erkannt. '
+                  'Keine Dateien oder Einstellungen geändert.')
+        else:
+            unique=list(dict.fromkeys(lines))
+            _show('WWE The Music – Soll-Zielordner (nur Vorschau)',
+                  '\n'.join(unique[:24])+
+                  '\n\nKeine Dateien verschoben oder umgetaggt. '
+                  'Für die reale Ablage muss das geprüfte Preset-3-Benennungsskript '
+                  'die Funktion $pw_wwe_folder() aufrufen.')
+
+
 class Inspect(BaseAction):
     TITLE = 'Konfiguration prüfen (nur lesen)'
     MENU = ('NEOWULF',)
@@ -91,6 +156,84 @@ class Inspect(BaseAction):
         except Exception as exc:
             self.api.logger.error('Naming inspection failed: %s', type(exc).__name__)
             _show('NEOWULF – Prüfung nicht möglich', str(exc), 'warning')
+
+
+class RepairActivePreset3Bmax(BaseAction):
+    TITLE = 'Aktives Preset 3: Musiksortierung reparieren (mit Backup)'
+    MENU = ('NEOWULF',)
+
+    def callback(self, objs):
+        """Only through the running Picard configuration API, never raw ini."""
+        from .preset3_migration import (prepare_active_preset3,
+                                        PresetMigrationRefused)
+        from hashlib import sha256
+
+        cfg=self.api.global_config
+        try:
+            scripts,_,active,_,profiles=_diag(cfg)
+            updated,record=prepare_active_preset3(scripts,active)
+            parser=ScriptParser()
+            # Validate the *complete original* inside a genuine Picard script
+            # function before writing even a temporary configuration setting.
+            parser.parse(updated[active]['script'])
+            if any('$pw_bmax_fullpath' in scripts[k].get('script','')
+                   for k in scripts if k!=active):
+                raise PresetMigrationRefused('Another preset is already patched')
+            message=(
+                'Nur das tatsächlich aktive Skript wird korrigiert:\n'
+                + str(record['title']) + '\n\n'
+                'Änderungen: deutsche Various Artists, Sammlerreihen, '
+                'Kollaborationen, Soundtracks sowie Rolf Zuckowski und Dr. Dre.\n'
+                'Der vollständige ursprüngliche Inhalt bleibt im neuen '
+                'Skript als verschachtelter Ausdruck erhalten; sein '
+                'Dateiname wird weiterhin verwendet.\n\n'
+                'Original SHA-256: '+record['original_sha256'][:20]+'…\n'
+                'Andere Presets und Musikdateien werden nicht verändert.\n'
+                'Vorher wird eine vollständige Picard.ini-Sicherung erstellt.\n'
+                'Bitte die Vorschau nach der Aktivierung prüfen!\n\n'
+                'Aktive Profile: '+str(len(profiles))+'\n'
+                'Preset 3 wirklich jetzt ändern?')
+            if QMessageBox.question(
+                None,'NEOWULF – Preset 3 reparieren',message,
+                QMessageBox.StandardButton.Yes|QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            ) != QMessageBox.StandardButton.Yes:
+                return
+            original_scripts=deepcopy(scripts)
+            original_active=active
+            bak=_backup(cfg)
+            # Hash the independently backed-up source file. It must exist and
+            # contain the synced settings *before* any mutation.
+            origin=_source_ini()
+            if (not bak.is_file() or
+                sha256(bak.read_bytes()).digest()!=sha256(origin.read_bytes()).digest()):
+                raise PresetMigrationRefused(
+                    'Config backup differs from current Picard.ini: no write')
+            try:
+                cfg.setting['file_renaming_scripts']=updated
+                cfg.sync()
+                now=cfg.setting['file_renaming_scripts']
+                if (cfg.setting['active_file_naming_script_id']!=active or
+                    now[active]['script']!=updated[active]['script'] or
+                    any(now[k]!=original_scripts[k] for k in original_scripts if k!=active)):
+                    raise PresetMigrationRefused(
+                        'Picard active preset verification failed')
+            except Exception:
+                cfg.setting['file_renaming_scripts']=original_scripts
+                cfg.setting['active_file_naming_script_id']=original_active
+                cfg.sync()
+                raise
+            _show('NEOWULF – Preset 3 korrigiert',
+                  'Aktives Preset 3 gesichert und korrigiert.\n'
+                  'Backup: '+str(bak)+'\n'
+                  'Vor der ersten Dateioperation unbedingt die '
+                  'Picard-Dateibenennungsvorschau auf den genannten Alben '
+                  'prüfen. KEINE Medien automatisch verschoben.')
+        except Exception as exc:
+            self.api.logger.error('Active Preset 3 repair refused: %s',
+                                  type(exc).__name__)
+            _show('NEOWULF – Preset 3 unverändert / Reparatur nicht bestätigt',
+                  str(exc),'warning')
 
 
 class Repair(BaseAction):
@@ -154,6 +297,7 @@ def _album_guard(api, album, metadata, release_node):
 _aggregator = None
 _controller = None
 _save_tracker = None
+_gold_controller = None
 _retiring_engine = None
 
 
@@ -200,6 +344,34 @@ def _original_file_snapshot(file):
                 filename=getattr(file,'filename','')
             return _file_snapshot(_Original())
     return _file_snapshot(file)
+
+
+def _retire_mp3_after_verified_flac(path):
+    """Worker-only: remove matching MP3 only after a verified FLAC save.
+
+    Keep an independently SHA-256-verified recovery copy outside the music
+    folder. Missing flac CLI or uncertain metadata means no deletion.
+    """
+    if not path:
+        return None
+    flac=Path(path)
+    if flac.suffix.casefold()!='.flac':
+        return None
+    mp3=flac.with_suffix('.mp3')
+    if not mp3.is_file():
+        return None
+    from .retention_policy import decide_mp3_removal, remove_verified_mp3
+    decision=decide_mp3_removal(mp3,flac)
+    if decision['action']!='REMOVE':
+        return decision
+    from .native_workflow import backup_envelope
+    from .save_tracking import verify_pre_save_identity
+    receipt=backup_envelope(str(mp3))
+    verify_pre_save_identity(receipt,str(mp3))
+    outcome=remove_verified_mp3(mp3,flac,backup_receipt=receipt)
+    if outcome['action']=='REMOVED':
+        outcome['backup']=receipt['manifest']
+    return outcome
 
 
 def _file_saved(api, file):
@@ -533,11 +705,24 @@ class TagSaveStatus(BaseAction):
             return
         status=_save_tracker.status()
         totals=', '.join(f'{entry["state"]}' for entry in status['recent'][-8:])
+        from .gold_retirement import native_gold_retirement_allowed
+        if not self.api.plugin_config.get('gold_auto_retire', True):
+            gold_state='AUS (PicardWulf-Einstellung)'
+        elif not native_gold_retirement_allowed(self.api):
+            gold_state=('GESPERRT: Picards eigene Option "Vollständige Alben nach dem '
+                        'Speichern entfernen" ist aktiv oder nicht verifizierbar. '
+                        'Picard kann ohne unabhängige PicardWulf-Prüfung entfernen; '
+                        'diese native Option zuerst in Picard deaktivieren.')
+        elif _gold_controller is None:
+            gold_state='NICHT GESTARTET (Plugin oder Qt-Controller prüfen)'
+        else:
+            gold_state='AKTIV (nur nach unabhängiger FLAC-Prüfung)'
         _show('PicardWulf – Tag-Speicherstatus',
               f'Ausstehende Picard-Speicherungen: {status["pending"]}\n'
               f'Laufende Dateiprüfungen: {status["verifying"]}\n'
               f'Laufende Wiederherstellungen: {status["restoring"]}\n'
-              f'Letzte Prüfergebnisse: {totals or "keine"}\n\n'
+              f'Letzte Prüfergebnisse: {totals or "keine"}\n'
+              f'Goldene CD automatisch aus der Ansicht: {gold_state}\n\n'
               'VERIFIED bedeutet Post-Save-Ereignis plus übereinstimmend '
               'zurückgelesene Tags und intakte Sicherung. '
               'UNVERIFIED oder MISMATCH bedeutet NICHT bestätigt. '
@@ -578,6 +763,120 @@ class SelectedFileReview(BaseAction):
 
 
 
+class NativeCollisionPreview(BaseAction):
+    TITLE = 'PicardWulf: Dateikollisionen / FLAC-Größenregel prüfen (nur lesen)'
+
+    def callback(self, objs):
+        try:
+            from .collision_preview import show_collision_preview
+            show_collision_preview(self.api, objs)
+        except Exception as exc:
+            self.api.logger.warning('PicardWulf native collision preview failed: %s',
+                                    type(exc).__name__)
+            _show('PicardWulf – Dateikollisionen',
+                  'Kollisionsprüfung nicht verfügbar; keine Dateien verändert.', 'warning')
+
+
+class SafeStagedFlacImport(BaseAction):
+    TITLE = 'PicardWulf: FLAC sicher in Musikbibliothek übernehmen (mit Backup)'
+
+    def callback(self, objs):
+        try:
+            from .picard_safe_import import show_safe_import
+            show_safe_import(self.api, objs, _save_tracker)
+        except Exception as exc:
+            self.api.logger.warning('PicardWulf safe FLAC import: %s', type(exc).__name__)
+            _show('PicardWulf – Sicherer FLAC-Import',
+                  'Import konnte nicht gestartet werden; keine Erfolgsmeldung.', 'warning')
+
+
+def _native_move_prepare(api):
+    """GUI-thread snapshot: background workers must never read ProfileConfig."""
+    config = api.plugin_config
+    return (bool(config.get('native_move_auto', False)),
+            str(config.get('native_recovery_root', '')))
+
+
+def _native_move_collision(api, old_filename, new_filename, settings,
+                           destination_loaded, frozen_policy):
+    """Patched Picard 3.0.2 move-worker hook; only immutable values are read.
+
+    Do not dereference api, Picard File, Tagger, Qt or ProfileConfig here.
+    The public core extension captures frozen_policy on the GUI thread.
+    """
+    if (not isinstance(frozen_policy, tuple)
+            or len(frozen_policy) != 2):
+        return {'action': 'KEEP', 'reason': 'missing_native_policy_snapshot'}
+    enabled, recovery_root = frozen_policy
+    if not enabled:
+        return {'action': 'UNHANDLED'}
+    from .native_move_bridge import arbitrate_native_flac_move
+    return arbitrate_native_flac_move(
+        old_filename, new_filename, settings, recovery_root,
+        destination_loaded=destination_loaded,
+    )
+
+
+class NativeMoveSafetyToggle(BaseAction):
+    TITLE = 'Native FLAC-Kollision (nur geprüfter Picard-Core-Build)'
+    MENU = ('PicardWulf',)
+
+    def callback(self, objs):
+        cfg = self.api.plugin_config
+        if cfg.get('native_move_auto', False):
+            cfg['native_move_auto'] = False
+            _show('PicardWulf – Native FLAC-Kollision',
+                  'Native Kollisionsintegration AUS. Standard-Picard-Verhalten aktiv.')
+            return
+        if not hasattr(self.api, 'register_file_move_collision_processor'):
+            _show('PicardWulf – Native FLAC-Kollision',
+                  'Der installierte Picard-Core bietet keine native '
+                  'Kollisionsschnittstelle. Keine Aktivierung, keine '
+                  'Datei- oder Profileinstellungen verändert.', 'warning')
+            return
+        from PyQt6.QtWidgets import QFileDialog
+        recovery = QFileDialog.getExistingDirectory(
+            getattr(self.api.tagger, 'window', None),
+            'Separaten Ordner für unveränderliche FLAC-Sicherungen wählen')
+        if not recovery:
+            return
+        folder = Path(recovery)
+        if not folder.is_dir() or folder.is_symlink():
+            _show('PicardWulf', 'Ungeprüfter Sicherungsordner.', 'warning')
+            return
+        settings = self.api.global_config.setting
+        try:
+            library = Path(settings['move_files_to'])
+            if (settings['move_files'] is not True
+                    or settings['move_overwrite_existing_files'] is not False
+                    or not library.is_absolute() or not library.is_dir()
+                    or folder.resolve().is_relative_to(library.resolve())
+                    or library.resolve().is_relative_to(folder.resolve())):
+                raise ValueError('unsafe_root')
+        except (ValueError, KeyError, TypeError, OSError):
+            _show('PicardWulf', 'Musikbibliothek und Sicherungen müssen '
+                  'getrennte absolute Verzeichnisse sein; natives Überschreiben '
+                  'muss AUS sein.', 'warning')
+            return
+        msg = ('Native Picard-Core-Kollisionsentscheidung NUR in einem '
+               'isolierten, mit realen FLAC-Testdateien geprüften '
+               'Picard-3.0.2-Testprofil aktivieren?\n\n'
+               'Bei identischem FLAC gewinnt die nach Tags/Decoder und '
+               'SHA-256 bestätigte größere Datei. Unklare Fälle behalten '
+               'die geladene Quelle. Original und Backup bleiben erhalten. '
+               'Diese Funktion darf NICHT ungeprüft auf Ihre aktive '
+               'Musikbibliothek angewandt werden.')
+        if QMessageBox.question(
+            None, 'PicardWulf – Native Kollisionsintegration', msg,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
+            cfg['native_recovery_root'] = str(folder)
+            cfg['native_move_auto'] = True
+            _show('PicardWulf', 'Native Kollisionsintegration im '
+                  'PicardWulf-Testprofil aktiviert. Kein globales '
+                  'Picard-Speicherprofil verändert.')
+
+
 class AutoApplyToggle(BaseAction):
     TITLE = 'Automatische Release-Auswahl ein-/ausschalten'
     MENU = ('PicardWulf',)
@@ -607,6 +906,19 @@ class AutoSaveToggle(BaseAction):
             self.api.plugin_config['auto_save_with_backup']=False
             _show('PicardWulf', 'Automatisches Speichern: AUS. Auto-Auswahl bleibt aktiv.')
             return
+        from .retention_policy import require_native_tag_only, RetentionRejected
+        try:
+            require_native_tag_only(self.api.global_config.setting)
+        except RetentionRejected:
+            _show('PicardWulf – Automatisches Speichern gesperrt',
+                  'Picards natives Umbenennen oder Verschieben ist aktiv oder '
+                  'die Einstellungen sind nicht verifizierbar. '
+                  'Damit könnte File.save() die geprüfte FLAC-Kollisionsregel '
+                  'umgehen. Für reine Tag-Speicherung die Picard-Optionen '
+                  '"Dateien umbenennen" und "Dateien verschieben" deaktivieren; '
+                  'zur sicheren Bibliotheksübernahme die separate '
+                  'PicardWulf-FLAC-Importaktion verwenden.', 'warning')
+            return
         notice=('Automatisches SPEICHERN von Musikdateien aktivieren?\n\n'
                 'Nur der eindeutige höchstbewertete Release-Treffer wird ausgewählt. '
                 'Vor jedem Speichern wird die vollständige Original-Audiodatei '
@@ -623,12 +935,40 @@ class AutoSaveToggle(BaseAction):
                   'Asynchrone Speichervorgänge und mögliche Umbenennungen in Picard prüfen.')
 
 def enable(api):
-    global _aggregator, _controller, _save_tracker
+    global _aggregator, _controller, _save_tracker, _gold_controller
     api.register_tools_menu_action(Inspect)
     api.register_tools_menu_action(Repair)
+    api.register_tools_menu_action(RepairActivePreset3Bmax)
+    # Native Picard scripting functions are optional and NEVER mutate the
+    # active file naming preset, user tags or Picard.ini automatically.
+    from .wwe_series import picard_wwe_folder
+    from .album_routing import picard_album_folder
+    api.register_script_function(
+        picard_wwe_folder, name='pw_wwe_folder',
+        documentation='WWE/WWF The Music sampler series album folder, read-only.',
+        signature='$pw_wwe_folder(album,date,originaldate)')
+    api.register_script_function(
+        picard_album_folder, name='pw_album_folder',
+        documentation='Verified sampler, collaboration, artist, DJ LiveSet album folder.',
+        signature='$pw_album_folder(album,albumartist,originaldate,date,secondary,albumartists,collection,volume)')
+    from .bmax_naming import picard_bmax_folder, picard_bmax_fullpath
+    api.register_script_function(
+        picard_bmax_folder, name='pw_bmax_folder',
+        documentation='BMAX verified sampler, soundtrack, collaboration and artist folder.',
+        signature='$pw_bmax_folder(album,albumartist,originaldate,date,release_type,albumartists,collection,volume)')
+    api.register_script_function(
+        picard_bmax_fullpath, name='pw_bmax_fullpath',
+        documentation='Retain original Preset 3 filename, repair only album destination.',
+        signature='$pw_bmax_fullpath(old_path,album,albumartist,originaldate,date,release_type,albumartists,collection,volume)')
+    api.register_file_action(WweSeriesPlacementPreview)
+    api.register_file_action(LiveSetMetadataSearch)
     api.register_album_metadata_processor(_album_guard, priority=-1000)
     api.plugin_config.register_option('auto_apply_best', True)
     api.plugin_config.register_option('auto_save_with_backup', False)
+    api.plugin_config.register_option('native_move_auto', False)
+    api.plugin_config.register_option('native_recovery_root', '')
+    api.plugin_config.register_option('flac_only_cleanup', True)
+    api.plugin_config.register_option('gold_auto_retire', True)
     api.plugin_config.register_option('search_paused', False)
     api.plugin_config.register_option('sqlite_batch_size', 256)
     api.plugin_config.register_option('disabled_providers', [])
@@ -644,8 +984,14 @@ def enable(api):
         _aggregator = None
         api.logger.error('Universal aggregator initialization failed: %s', type(exc).__name__)
         return
-    _save_tracker=SaveTracker()
+    _save_tracker=SaveTracker(on_verified=(_retire_mp3_after_verified_flac if
+        api.plugin_config.get('flac_only_cleanup',True) else None))
     api.register_file_post_save_processor(_file_saved)
+    # This extension exists ONLY in the separately reviewed, locally built
+    # Picard 3.0.2 core patch; stock Picard lacks it. Default is OFF.
+    if hasattr(api, 'register_file_move_collision_processor'):
+        api.register_file_move_collision_processor(
+            _native_move_collision, _native_move_prepare)
     try:
         _controller = AutoApplyController(api, _aggregator, _file_snapshot,
                                           ingest_snapshot_func=_original_file_snapshot,
@@ -659,6 +1005,16 @@ def enable(api):
         api.logger.error('Automatic matching initialization failed: %s',type(exc).__name__)
     api.register_file_post_load_processor(_file_loaded)
     api.register_track_metadata_processor(_track_loaded, priority=-1000)
+    # Gold retirement is stricter than Picard's native complete-album option:
+    # actual FLAC tags are checked off-GUI before invoking UI-only removal.
+    # No auto-removal in headless/mock contexts without an actual Qt window.
+    if getattr(api.tagger, 'window', None) is not None and api.plugin_config.get('gold_auto_retire', True):
+        try:
+            from .gold_retirement import start_gold_retirement
+            _gold_controller = start_gold_retirement(api, _save_tracker)
+        except Exception as exc:
+            _gold_controller = None
+            api.logger.error('PicardWulf gold retirement not started: %s', type(exc).__name__)
     api.register_tools_menu_action(SourceStatus)
     api.register_tools_menu_action(ProviderPolicyAction)
     api.register_tools_menu_action(CredentialsAction)
@@ -671,12 +1027,24 @@ def enable(api):
     api.register_album_action(SimilarAlbumsAllSources)
     api.register_tools_menu_action(NativeReview)
     api.register_file_action(SelectedFileReview)
+    api.register_file_action(NativeCollisionPreview)
+    api.register_file_action(SafeStagedFlacImport)
     api.register_tools_menu_action(AutoApplyToggle)
     api.register_tools_menu_action(AutoSaveToggle)
+    api.register_tools_menu_action(NativeMoveSafetyToggle)
 
 
 def disable():
-    global _aggregator, _controller, _retiring_engine, _save_tracker
+    global _aggregator, _controller, _retiring_engine, _save_tracker, _gold_controller
+    from .collision_preview import stop_collision_previews
+    stop_collision_previews()
+    from .picard_safe_import import stop_safe_imports
+    stop_safe_imports()
+    from .liveset_ui import stop_live_set_lookups
+    stop_live_set_lookups()
+    if _gold_controller is not None:
+        _gold_controller.stop()
+        _gold_controller = None
     if _controller is not None:
         _controller.stop()
     _controller=None
