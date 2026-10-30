@@ -153,3 +153,99 @@ def picard_preset3_folder(parser, album: str, albumartist: str,
         'sampler_volume': volume,
     })
     return result.folder if result.folder and not result.review else ''
+
+
+_WRAPPER_MARKER = '$pw_preset3_retarget('
+_MASTER = '[--1--MUSiKz------------]'
+_DISC = re.compile(r'^(?:CD|Disc|Disk)\s*\d{1,2}$', re.I)
+
+
+class Preset3Unsafe(ValueError):
+    pass
+
+
+def retarget_original(original: str, album: str, albumartist: str,
+                      originaldate: str = '', date: str = '',
+                      artist: str = '', secondary: str = '',
+                      albumartists: str = '', collection: str = '',
+                      volume: str = '') -> str:
+    """Retain the original evaluated track filename and disc subdirectory.
+
+    Unrecognized releases return the PRECISE ORIGINAL SCRIPT OUTPUT.
+    """
+    value = _str(original)
+    md = {
+        'album': album, 'albumartist': albumartist,
+        'originaldate': originaldate, 'date': date,
+        'artist': artist, '_secondaryreleasetype': secondary,
+        'albumartists': [s.strip() for s in albumartists.split(';') if s.strip()],
+        'sampler_collection': collection, 'sampler_volume': volume,
+    }
+    route = route_preset3(md)
+    if not route.folder or route.review:
+        return original
+    # Picard file naming scripts are relative, without Windows drive roots.
+    # Reject absolute values and traversal rather than constructing an
+    # unverified new destination.
+    normalized = value.replace('\\', '/')
+    if (not normalized or normalized.startswith(('/', '//')) or
+            re.match(r'^[A-Za-z]:', normalized)):
+        return original
+    parts = normalized.split('/')
+    if (len(parts) < 2 or any(part in ('', '.', '..') for part in parts)
+            or not parts[-1]):
+        return original
+    prefix = (_MASTER + '/') if parts[0].casefold() == _MASTER.casefold() else ''
+    # Preserve per-disc folders if the original script explicitly emitted one.
+    leaf = '/'.join(parts[-2:]) if len(parts) > 2 and _DISC.fullmatch(parts[-2]) else parts[-1]
+    return prefix + route.folder + '/' + leaf
+
+
+def picard_preset3_retarget(parser, original: str, album: str,
+                            albumartist: str, originaldate: str = '',
+                            date: str = '', artist: str = '',
+                            secondary: str = '', albumartists: str = '',
+                            collection: str = '', volume: str = '') -> str:
+    return retarget_original(
+        original, album, albumartist, originaldate, date, artist,
+        secondary, albumartists, collection, volume)
+
+
+def prepare_active_preset3(scripts: dict, active_id: str) -> dict:
+    """Copy/patch ONLY the selected live Preset 3; rejects ambiguous scripts.
+
+    The caller must hold the live Picard config, back it up and parse+verify
+    the generated script using the exact runtime before committing changes.
+    """
+    from copy import deepcopy
+    if not isinstance(scripts, dict) or not isinstance(active_id, str):
+        raise Preset3Unsafe('Invalid selected script collection')
+    if active_id not in scripts or not isinstance(scripts[active_id], dict):
+        raise Preset3Unsafe('Active script ID not present')
+    info = scripts[active_id]
+    title = _str(info.get('title'))
+    body = info.get('script')
+    if not (re.fullmatch(r'Preset\s*3', title, re.I) or
+            re.fullmatch(r'Preset\s*3', active_id, re.I)):
+        raise Preset3Unsafe('Active script is not verified as Preset 3')
+    if not isinstance(body, str) or not body.strip():
+        raise Preset3Unsafe('Active Preset 3 is empty')
+    if _WRAPPER_MARKER in body:
+        raise Preset3Unsafe('Preset 3 already wrapped; no second patch')
+    if len(body) > 16000:
+        raise Preset3Unsafe('Unexpected overly long script; manual audit required')
+    # No duplicate or loss of existing naming code: the first evaluated
+    # argument is the entire exact OLD script.
+    wrapper = (
+        '$pw_preset3_retarget(' + body +
+        ',%album%,%albumartist%,%originaldate%,%date%,%artist%,' +
+        '$join(%_secondaryreleasetype%,;),$join(%albumartists%,;),' +
+        '%sampler_collection%,%sampler_volume%)'
+    )
+    result = deepcopy(scripts)
+    result[active_id]['script'] = wrapper
+    assert result[active_id]['script'].count(body) == 1
+    for key in scripts:
+        if key != active_id and result[key] != scripts[key]:
+            raise Preset3Unsafe('Unrelated script changed')
+    return result
