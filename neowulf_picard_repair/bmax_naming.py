@@ -172,3 +172,30 @@ def picard_bmax_folder(parser, album: str, albumartist: str,
         "sampler_collection":collection, "sampler_volume":volume,
     })
     return item.relative_folder if not item.requires_review else ""
+
+
+def picard_bmax_fullpath(parser, old_relative: str, album: str,
+                        albumartist: str, originaldate: str = "",
+                        date: str = "", release_type: str = "",
+                        albumartists: str = "", collection: str = "",
+                        volume: str = "") -> str:
+    """Wrap an entire legacy Preset-3 script, preserving its file leaf.
+
+    A documented Picard scripting function receives the fully evaluated
+    legacy script as its FIRST argument. Reuse its leaf filename unchanged;
+    replace ONLY the music album directory if evidence supports a policy
+    correction. Ambiguous releases retain original output.
+    """
+    original=str(old_relative or "").strip().replace("\\","/")
+    if not original or original.startswith("/") or ".." in original.split("/"):
+        return ""
+    segments=original.split("/")
+    if not segments or not segments[-1] or segments[-1] in {".",".."}:
+        return ""
+    if any(x in segments[-1] for x in '<>:"\\|?*\x00'):
+        return ""
+    target=picard_bmax_folder(parser,album,albumartist,originaldate,date,
+                              release_type,albumartists,collection,volume)
+    if not target:
+        return old_relative
+    return target+"/"+segments[-1]
