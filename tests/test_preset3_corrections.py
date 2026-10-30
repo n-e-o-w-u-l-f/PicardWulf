@@ -13,8 +13,8 @@ sys.modules[MODULE]=package
 mod=importlib.import_module(MODULE+".preset3_corrections")
 
 class UserNamedCorrections(unittest.TestCase):
-    def route(self,album,artist,year,**kwargs):
-        return mod.route_preset3(dict(album=album,albumartist=artist,date=year,**kwargs))
+    def route(self,album,albumartist,year,**kwargs):
+        return mod.route_preset3(dict(album=album,albumartist=albumartist,date=year,**kwargs))
 
     def test_w_and_w_exact_credit_is_collaborative_not_artist(self):
         credit="W&W X AXMO X André Schnura feat. Lucenzo & Don Omar"
