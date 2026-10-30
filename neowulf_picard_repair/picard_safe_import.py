@@ -77,10 +77,23 @@ def capture_safe_import(file, settings, recovery_dir, tracker=None):
                                         getall('_albumartists'))
         else:
             snapshot['albumartists'] = getter('albumartists', ())
-        decision = route_album(snapshot)
+        # Preset 3 on BMAX uses a dedicated master directory and
+        # decorated category names. Detect the master inside either the
+        # configured root or native destination; do not duplicate it.
+        from .preset3_corrections import route_preset3
+        master_name = '[--1--MUSiKz------------]'
+        if library_root.name.casefold() == master_name.casefold():
+            master_root = library_root
+        else:
+            relative = target.relative_to(library_root)
+            matched = next((i for i, part in enumerate(relative.parts[:-1])
+                            if part.casefold() == master_name.casefold()), None)
+            master_root = (library_root.joinpath(*relative.parts[:matched+1])
+                           if matched is not None else None)
+        decision = route_preset3(snapshot) if master_root else route_album(snapshot)
         if decision.folder and not decision.review:
-            target = library_root.joinpath(
-                *decision.folder.split('/'), target.name)
+            base = master_root if master_root is not None else library_root
+            target = base.joinpath(*decision.folder.split('/'), target.name)
     # The offline importer creates missing album/series subfolders only after
     # explicit confirmation, then rolls back empty created folders on error.
     return {
