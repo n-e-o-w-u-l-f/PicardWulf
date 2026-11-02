@@ -72,6 +72,14 @@ def classify_bmax(md: Mapping[str,object]) -> NamingDecision:
     clean=component(title)
     if not clean:
         return NamingDecision("REVIEW","","unsafe_album",True)
+    # Narrow release-wide policy takes precedence over the old
+    # 'compilation' or per-track artist fallback.
+    from .release_scope import release_artist_scope
+    album_scope=release_artist_scope(md,year)
+    if album_scope is not None:
+        return NamingDecision(
+            album_scope.kind,album_scope.folder,album_scope.reason,
+            album_scope.review)
     if _ROLF.fullmatch(title):
         if title.casefold().startswith("rolfs liederkalender") or "jahresuhr" in title.casefold():
             clean="Die Jahresuhr"
@@ -180,7 +188,8 @@ def picard_bmax_fullpath(parser, old_relative: str, album: str,
                         albumartist: str, originaldate: str = "",
                         date: str = "", release_type: str = "",
                         albumartists: str = "", collection: str = "",
-                        volume: str = "") -> str:
+                        volume: str = "", discnumber: str = "",
+                        totaldiscs: str = "") -> str:
     """Wrap an entire legacy Preset-3 script, preserving its file leaf.
 
     A documented Picard scripting function receives the fully evaluated
@@ -200,4 +209,13 @@ def picard_bmax_fullpath(parser, old_relative: str, album: str,
                               release_type,albumartists,collection,volume)
     if not target:
         return old_relative
-    return target+"/"+segments[-1]
+    from .release_scope import disc_subfolder, release_artist_scope
+    policy=release_artist_scope({
+        "album":album, "albumartist":albumartist,
+        "originaldate":originaldate, "date":date,
+        "albumartists":[v.strip() for v in albumartists.split(";") if v.strip()],
+    }, (_year({"originaldate":originaldate,"date":date})))
+    relative=disc_subfolder(
+        original,discnumber,totaldiscs,
+        allowed=bool(policy and policy.coherent_discs and not policy.review))
+    return target+"/"+relative
