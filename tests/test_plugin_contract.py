@@ -111,7 +111,7 @@ class TestContract(unittest.TestCase):
         with patch.object(plugin,'AutoApplyController'),patch.object(plugin,'UniversalAggregator'):
             plugin.enable(api)
         functions=[entry for entry in api.registered if entry[0]=='script_function']
-        self.assertEqual(len(functions),2)
+        self.assertEqual(len(functions),4)
         self.assertEqual(functions[0][2]['name'],'pw_wwe_folder')
         self.assertEqual(functions[0][1](None,'Voices: WWE The Music Vol. 9','2009'),
                          'Various Artists/WWE The Music/2009 - WWE The Music Volume 9')
