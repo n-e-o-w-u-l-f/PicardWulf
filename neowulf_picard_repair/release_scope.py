@@ -148,8 +148,8 @@ def release_artist_scope(md: Mapping[str,object], year: str) -> Scope | None:
             return Scope("REVIEW","","wwe_entrance_themes_release_year_needed",True)
         disc=first(md.get("discnumber"))
         total=first(md.get("totaldiscs") or md.get("disctotal"))
-        if ((disc and not re.fullmatch(r"0?[1-9]\\d?",disc)) or
-                (total and not re.fullmatch(r"0?[2-9]\\d?",total)) or
+        if ((disc and not re.fullmatch(r"0?[1-9]\d?",disc)) or
+                (total and not re.fullmatch(r"0?[2-9]\d?",total)) or
                 (disc and total and int(disc)>int(total))):
             return Scope("REVIEW","","wwe_entrance_themes_disc_conflict",True)
         coherent=bool(disc and total and int(disc)<=int(total))
@@ -177,7 +177,7 @@ def disc_subfolder(original_relative: str, discnumber: object,
         return leaf
     d=first(discnumber)
     n=first(totaldiscs)
-    if not re.fullmatch(r"[1-9]\d?",d) or not re.fullmatch(r"[2-9]\d?",n):
+    if not re.fullmatch(r"0?[1-9]\d?",d) or not re.fullmatch(r"0?[2-9]\d?",n):
         return leaf
     if int(d)>int(n):
         return leaf
