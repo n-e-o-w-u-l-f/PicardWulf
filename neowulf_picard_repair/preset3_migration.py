@@ -15,7 +15,7 @@ PREFIX="$pw_bmax_fullpath("
 SUFFIX=(
     ",%album%,%albumartist%,%originaldate%,%date%,"
     "%_primaryreleasetype%,$join(%albumartists%,;),"
-    "%sampler_collection%,%sampler_volume%)"
+    "%sampler_collection%,%sampler_volume%,%discnumber%,%totaldiscs%)"
 )
 
 
