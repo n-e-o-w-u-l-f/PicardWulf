@@ -219,6 +219,7 @@ def picard_bmax_fullpath(parser, old_relative: str, album: str,
     policy=release_artist_scope({
         "album":album, "albumartist":albumartist,
         "originaldate":originaldate, "date":date,
+        "discnumber":discnumber, "totaldiscs":totaldiscs,
         "albumartists":[v.strip() for v in albumartists.split(";") if v.strip()],
     }, (_year({"originaldate":originaldate,"date":date})))
     relative=disc_subfolder(
