@@ -133,17 +133,30 @@ def release_artist_scope(md: Mapping[str,object], year: str) -> Scope | None:
     if _WWE_ANTHOLOGY.fullmatch(title):
         if year and year!="2002":
             return Scope("REVIEW","","wwe_anthology_edition_year_conflict",True)
+        disc=first(md.get("discnumber"))
+        total=first(md.get("totaldiscs") or md.get("disctotal"))
+        if ((disc and disc not in {"1","2","3","01","02","03"}) or
+                (total and total not in {"3","03"})):
+            return Scope("REVIEW","","wwe_anthology_original_three_disc_conflict",True)
+        coherent=bool(disc in {"1","2","3","01","02","03"} and total in {"3","03"})
         return Scope("SAMPLER",
                      f"{VA_ROOT}/WWE Anthology/2002 - WWE Anthology",
-                     "official_wwe_anthology_three_cd",coherent_discs=True)
+                     "official_wwe_anthology_three_cd",coherent_discs=coherent)
 
     if _WWE_ENTRANCE.fullmatch(title):
         if not year:
             return Scope("REVIEW","","wwe_entrance_themes_release_year_needed",True)
+        disc=first(md.get("discnumber"))
+        total=first(md.get("totaldiscs") or md.get("disctotal"))
+        if ((disc and not re.fullmatch(r"0?[1-9]\\d?",disc)) or
+                (total and not re.fullmatch(r"0?[2-9]\\d?",total)) or
+                (disc and total and int(disc)>int(total))):
+            return Scope("REVIEW","","wwe_entrance_themes_disc_conflict",True)
+        coherent=bool(disc and total and int(disc)<=int(total))
         return Scope("SAMPLER",
                      f"{VA_ROOT}/WWE Entrance Themes/{year} - WWE Entrance Themes",
                      "user_confirmed_entrance_theme_disc_group",
-                     coherent_discs=True)
+                     coherent_discs=coherent)
     return None
 
 
