@@ -70,7 +70,8 @@ def capture_safe_import(file, settings, recovery_dir, tracker=None):
         snapshot = {key: getter(key, '') for key in (
             'album', 'albumartist', 'artist', 'originaldate', 'date',
             'event_date', 'set_date', 'releasetype', '_secondaryreleasetype',
-            'sampler_collection', 'sampler_volume', 'is_liveset', 'set_type')}
+            'sampler_collection', 'sampler_volume', 'is_liveset', 'set_type',
+            'discnumber', 'totaldiscs')}
         getall = getattr(metadata, 'getall', None)
         if callable(getall):
             snapshot['albumartists'] = (getall('albumartists') or
@@ -93,7 +94,20 @@ def capture_safe_import(file, settings, recovery_dir, tracker=None):
         decision = route_preset3(snapshot) if master_root else route_album(snapshot)
         if decision.folder and not decision.review:
             base = master_root if master_root is not None else library_root
-            target = base.joinpath(*decision.folder.split('/'), target.name)
+            # Only named, coherent multi-disc releases may receive a CD nn
+            # folder. The source name and the previously native disc folder
+            # are retained; actual audio bytes and settings stay untouched
+            # until the separate two-stage import is explicitly confirmed.
+            from .release_scope import release_artist_scope, disc_subfolder
+            from .album_routing import _year
+            original_year,_ = _year(snapshot)
+            scope = release_artist_scope(snapshot,original_year)
+            relative_native = target.relative_to(base).as_posix()
+            leaf = disc_subfolder(
+                relative_native,snapshot.get('discnumber'),
+                snapshot.get('totaldiscs'),
+                allowed=bool(scope and scope.coherent_discs and not scope.review))
+            target = base.joinpath(*decision.folder.split('/'), *leaf.split('/'))
     # The offline importer creates missing album/series subfolders only after
     # explicit confirmation, then rolls back empty created folders on error.
     return {
