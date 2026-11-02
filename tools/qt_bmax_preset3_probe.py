@@ -70,6 +70,38 @@ def main():
             if actual!=expected:
                 raise AssertionError(f'{title}: {actual!r} != {expected!r}')
             count+=1
+        # Verify real Picard native argument evaluation for the new
+        # multi-CD policy, not only a detached Python helper.
+        release_cases=[
+            ("Meine coolsten Hits","Various Artists","2022","1","2",
+             "Frank Zander/2022 - Meine coolsten Hits/CD 01/01 - Intro"),
+            ("Meine coolsten Hits CD 2","Verschiedene Interpreten","2022","2","2",
+             "Frank Zander/2022 - Meine coolsten Hits/CD 02/01 - Intro"),
+            ("Ihr Nutten","Various Artists","2001","","",
+             "Die Sekte/2001 - Ihr Nutten/01 - Intro"),
+            ("Aggro Ansage Nr. 3","Die Sekte","2003","","",
+             "Die Sekte/2003 - Aggro Ansage Nr. 3/01 - Intro"),
+            ("Aggro Ansage Nr. 1","Various Artists","2002","","",
+             "Various Artists/2002 - Aggro Ansage Nr. 1/01 - Intro"),
+            ("WWE Anthology","Various Artists","2002","3","3",
+             "![-1.2-VARiOUS-ARTiSTz-]!/WWE Anthology/2002 - WWE Anthology/CD 03/01 - Intro"),
+            ("WWE Entrance Themes CD 1","Various Artists","2004","1","2",
+             "![-1.2-VARiOUS-ARTiSTz-]!/WWE Entrance Themes/2004 - WWE Entrance Themes/CD 01/01 - Intro"),
+        ]
+        for album,albumartist,year,disc,total,expected in release_cases:
+            md=Metadata()
+            for key,value in {
+                "album":album,"albumartist":albumartist,"date":year,
+                "discnumber":disc,"totaldiscs":total,
+                "tracknumber":"1","title":"Intro",
+            }.items():
+                md[key]=value
+            actual=parser.eval(transformed["id3"]["script"],context=md)
+            if actual != expected:
+                raise AssertionError(
+                    f"Real Picard Preset3 {album!r} CD {disc}: "
+                    f"{actual!r} != {expected!r}")
+            count+=1
         print(json.dumps({
             "status":"PASS","picard":picard.__version__,
             "real_script_parser":True,"cases":count,
