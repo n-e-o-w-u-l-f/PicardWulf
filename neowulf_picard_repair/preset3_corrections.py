@@ -113,6 +113,12 @@ def route_preset3(metadata: Mapping[str, object]):
     album = _str(metadata.get('album'))
     artist = _str(metadata.get('albumartist'))
     year, _ = _year(metadata)
+    # Apply the same release-wide credits as the registered BMAX native
+    # Preset3 route; do not maintain contradictory VA/artist classifications.
+    from .release_scope import release_artist_scope
+    scope = release_artist_scope(metadata, year)
+    if scope is not None:
+        return AlbumRoute(scope.kind, scope.folder, scope.reason, scope.review)
     correction = classify(metadata, year)
     if correction:
         return AlbumRoute(correction.kind, correction.folder,
