@@ -44,14 +44,18 @@ class ReleaseWideCompilationTests(unittest.TestCase):
         self.artist("Aggro Ansage Nr. 3","Die Sekte","2003",
                     "Die Sekte/2003 - Aggro Ansage Nr. 3")
 
-    def test_aggro_ansage_various_not_blindly_recredited(self):
+    def test_aggro_ansage_local_folder_override_never_changes_original_credit(self):
         md={"album":"Aggro Ansage Nr. 1","date":"2002",
             "albumartist":"Various Artists",
             "_secondaryreleasetype":"compilation"}
         for route in (bmax.classify_bmax,preset.route_preset3):
             result=route(md)
             review=result.requires_review if hasattr(result,"requires_review") else result.review
-            self.assertTrue(review,result)
+            self.assertFalse(review,result)
+            folder=(result.relative_folder if hasattr(result,"relative_folder") else result.folder)
+            self.assertEqual(folder,"Die Sekte/2002 - Aggro Ansage Nr. 1")
+            self.assertIn("local_archive_override",result.reason)
+        # A user archive path does NOT constitute an official artist tag rewrite.
         self.assertEqual(md["albumartist"],"Various Artists")
 
     def test_frank_zander_2022_compilation_all_tracks_one_album(self):
