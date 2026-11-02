@@ -166,6 +166,30 @@ class TestContract(unittest.TestCase):
         self.assertIn('Keine Dateien verschoben',rendered)
         self.assertEqual(metadata,unchanged)
 
+    def test_bmax_preview_prioritizes_artist_release_over_bad_va_tags(self):
+        api=Api()
+        action=plugin.WweSeriesPlacementPreview()
+        action.api=api
+        for title,credit,year,expected in (
+            ('Meine coolsten Hits','Various Artists','2022',
+             'Frank Zander'),
+            ('Ihr Nutten','Verschiedene Interpreten','2001',
+             'Die Sekte'),
+            ('WWE Anthology','Various Artists','2002',
+             'WWE Anthology'),
+        ):
+            with self.subTest(title=title):
+                FakeMessageBox.messages.clear()
+                tags={'album':title,'albumartist':credit,
+                      'artist':'guest performer','date':year,
+                      '_secondaryreleasetype':'compilation'}
+                before=dict(tags)
+                action.callback([types.SimpleNamespace(metadata=tags)])
+                text=' '.join(str(x) for x in FakeMessageBox.messages)
+                self.assertIn(expected,text)
+                self.assertIn('Keine Dateien verschoben',text)
+                self.assertEqual(before,tags)
+
     def test_uncertain_va_artist_compilation_warns_without_retagging(self):
         api=Api()
         action=plugin.WweSeriesPlacementPreview()
