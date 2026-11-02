@@ -1,12 +1,12 @@
 # LAST_TASKS — PicardWulf
 
-Updated: 2026-10-27 · Project: `n-e-o-w-u-l-f/PicardWulf`
+Updated: 2026-11-02 · Project: `n-e-o-w-u-l-f/PicardWulf`
 
 ## 2026-10-17 · Native Save Guard und echter FLAC-Rollback
 
 - Nach fehlgeschlagener Post-Commit-SHA-256- oder Decoderprüfung wird die vorherige FLAC jetzt **tatsächlich** aus dem separaten Backup wiederhergestellt; fehlerhafte Wiederherstellung bleibt explizit UNVERIFIED.
 - PicardWulf-eigene Auto-/manuelle `File.save()` erfordern `rename_files=False` und `move_files=False`; Toggle verweigert risikoreiche Aktivierung ohne Änderung an Picard.ini/Preset 3.
-- **4-Wege-Router**: Sampler/Kollaborationen/Künstler/LiveSets; Mixcloud-Lookup nur mit Zustimmung, FLAC-Import gesichert. [Konzept](docs/planning/FOUR-WAY-ALBUM-ROUTING-LIVESETS-20261027.md). **403 Tests OK (2 Skips) vor letztem GUI-Patch; neuer Gesamttest blockiert. BMAX/Strg+S OFFEN.** PR #1 DRAFT.
+- **483 Tests PASS**, echter Picard 3.0.2-Preset-3-Parser 12 Fälle PASS: Die Sekte, Frank Zander 2CD, WWE Anthology 3CD. [Nachweis](docs/planning/ARTIST-COMPILATIONS-WWE-MULTIDISC-20261102.md). BMAX/Preset 3 unverändert; Windows-Abnahme OPEN; PR DRAFT.
 
 ## 2026-10-17 · Picard-Dateiaktion und BMAX-Audit
 
