@@ -6,7 +6,7 @@ Updated: 2026-11-02 · Project: `n-e-o-w-u-l-f/PicardWulf`
 
 - Nach fehlgeschlagener Post-Commit-SHA-256- oder Decoderprüfung wird die vorherige FLAC jetzt **tatsächlich** aus dem separaten Backup wiederhergestellt; fehlerhafte Wiederherstellung bleibt explizit UNVERIFIED.
 - PicardWulf-eigene Auto-/manuelle `File.save()` erfordern `rename_files=False` und `move_files=False`; Toggle verweigert risikoreiche Aktivierung ohne Änderung an Picard.ini/Preset 3.
-- **483 Tests PASS**, echter Picard 3.0.2-Preset-3-Parser 12 Fälle PASS: Die Sekte, Frank Zander 2CD, WWE Anthology 3CD. [Nachweis](docs/planning/ARTIST-COMPILATIONS-WWE-MULTIDISC-20261102.md). BMAX/Preset 3 unverändert; Windows-Abnahme OPEN; PR DRAFT.
+- **498 Tests PASS**, echter Picard-3.0.2-Parser **13 Fälle PASS**: Die Sekte/Aggro (lokale Ordnerregel, VA-Tags bleiben), Frank Zander 2CD, WWE Anthology 3CD/Entrance. [Nachweis](docs/planning/ARTIST-COMPILATION-BMAX-20261102.md). BMAX-Picard.ini-Leseauftrag offen; keine Live-Änderung; PR DRAFT.
 
 ## 2026-10-17 · Picard-Dateiaktion und BMAX-Audit
 
