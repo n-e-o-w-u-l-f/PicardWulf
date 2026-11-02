@@ -201,10 +201,16 @@ def picard_bmax_fullpath(parser, old_relative: str, album: str,
     if not original or original.startswith("/") or ".." in original.split("/"):
         return ""
     segments=original.split("/")
-    if not segments or not segments[-1] or segments[-1] in {".",".."}:
+    if (not segments or not segments[-1] or
+        any(x in ("", ".", "..") for x in segments) or
+        len(segments[0])>=2 and segments[0][1]==":"):
         return ""
     if any(x in segments[-1] for x in '<>:"\\|?*\x00'):
         return ""
+    # Preserve the original master folder when the user's naming script
+    # places it above the named artist/category subdirectories.
+    master="[--1--MUSiKz------------]"
+    master_prefix=master+"/" if segments[0].casefold()==master.casefold() else ""
     target=picard_bmax_folder(parser,album,albumartist,originaldate,date,
                               release_type,albumartists,collection,volume)
     if not target:
@@ -218,4 +224,4 @@ def picard_bmax_fullpath(parser, old_relative: str, album: str,
     relative=disc_subfolder(
         original,discnumber,totaldiscs,
         allowed=bool(policy and policy.coherent_discs and not policy.review))
-    return target+"/"+relative
+    return master_prefix+target+"/"+relative
