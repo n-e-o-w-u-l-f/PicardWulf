@@ -162,6 +162,39 @@ class GuiTests(unittest.TestCase):
             self.assertEqual(f.destination,native)
             self.assertEqual(Path(f.filename).read_bytes(),source)
 
+    def test_bmax_safe_import_preserves_frank_and_wwe_multidisc_releases(self):
+        cases=(
+            ("Meine coolsten Hits", "2022", "2", "2",
+             ("Frank Zander","2022 - Meine coolsten Hits","CD 02")),
+            ("WWE Anthology", "2002", "3", "3",
+             ("![-1.2-VARiOUS-ARTiSTz-]!","WWE Anthology",
+              "2002 - WWE Anthology","CD 03")),
+            ("Ihr Nutten","2001","","",
+             ("Die Sekte","2001 - Ihr Nutten")),
+        )
+        with tempfile.TemporaryDirectory() as t:
+            f,settings,backup,tracker,_=self.fixture(t)
+            root=Path(settings["move_files_to"])/"[--1--MUSiKz------------]"
+            root.mkdir()
+            settings["move_files_to"]=str(root)
+            original_bytes=Path(f.filename).read_bytes()
+            for title,year,disc,total,parts in cases:
+                with self.subTest(album=title):
+                    f.destination=str(root/"![-1.2-VARiOUS-ARTiSTz-]!"/
+                        "Wrong Group"/"01 - Track.flac")
+                    f.metadata={"album":title,"date":year,
+                                "albumartist":"Various Artists",
+                                "artist":"Guest Performer",
+                                "discnumber":disc,"totaldiscs":total,
+                                "_secondaryreleasetype":"compilation"}
+                    prior_settings=dict(settings)
+                    result=ui.capture_safe_import(f,settings,backup,tracker)
+                    expected=root.joinpath(*parts,"01 - Track.flac")
+                    self.assertEqual(Path(result["destination"]),expected)
+                    self.assertEqual(settings,prior_settings)
+                    self.assertEqual(Path(f.filename).read_bytes(),original_bytes)
+                    self.assertFalse(expected.exists())
+
     def test_solo_compilation_safe_import_keeps_artist_preset_path(self):
         with tempfile.TemporaryDirectory() as t:
             f,settings,backup,tracker,_=self.fixture(t)
