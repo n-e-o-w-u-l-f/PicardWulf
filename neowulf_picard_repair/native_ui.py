@@ -209,6 +209,11 @@ def show_native_window(api, aggregator, files, snapshot_func, save_tracker=None,
     def write_with_backup():
         try:
             f,q,c,proposal,diffs,txt=proposed()
+            from .retention_policy import require_native_tag_only, RetentionRejected
+            try:
+                require_native_tag_only(api.global_config.setting)
+            except RetentionRejected as exc:
+                raise UnsafeCandidate(str(exc)) from exc
             if not getattr(f,'can_save',True) or not getattr(f,'can_edit_tags',True):
                 raise UnsafeCandidate('Diese Datei unterstützt kein Tag-Speichern.')
             answer=QMessageBox.question(dlg,'PicardWulf – Tag-Speicherung bestätigen',
@@ -257,6 +262,12 @@ def show_native_window(api, aggregator, files, snapshot_func, save_tracker=None,
                 raise UnsafeCandidate('Original-Identität nicht bestätigt; nicht speichern.')
             if save_tracker is None:
                 raise UnsafeCandidate('Nachprüfung via Picard-Post-Save-Hook nicht verfügbar.')
+            # Settings may have changed while the async audio backup ran.
+            from .retention_policy import require_native_tag_only, RetentionRejected
+            try:
+                require_native_tag_only(api.global_config.setting)
+            except RetentionRejected as exc:
+                raise UnsafeCandidate(str(exc)) from exc
             old=Metadata()
             old.copy(f.metadata)
             save_token=None

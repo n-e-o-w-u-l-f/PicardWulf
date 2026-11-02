@@ -4,7 +4,7 @@ An asynchronous File.save() call is NOT a successful disk write. A successful
 post-save processor event is a completion signal, not independent verification.
 Backups remain untouched on success, failure, timeout, or plugin disable.
 """
-from collections import deque
+from collections import deque, OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
@@ -198,16 +198,37 @@ def restore_backup_copy(backup, new_destination):
 class SaveTracker:
     """State machine; File/Qt objects stay on Picard callback thread."""
 
-    def __init__(self, max_pending=32, save_timeout=600):
+    def __init__(self, max_pending=32, save_timeout=600, on_verified=None):
         self._lock=threading.RLock()
         self._pending={}
         self._last=deque(maxlen=80)
+        self._path_results=OrderedDict()
         self._pool=ThreadPoolExecutor(max_workers=1,thread_name_prefix='PicardWulf-TagReadback')
         self._closed=False
         self._verifying=0
         self._restoring=0
         self.max_pending=max_pending
         self.save_timeout=save_timeout
+        self._on_verified=on_verified
+
+    @staticmethod
+    def _path_key(path):
+        return os.path.normcase(os.path.abspath(str(path)))
+
+    def _mark_path(self, path, state):
+        key=self._path_key(path)
+        self._path_results[key]=state
+        self._path_results.move_to_end(key)
+        while len(self._path_results)>4096:
+            self._path_results.popitem(last=False)
+
+    def path_state(self, path):
+        with self._lock:
+            return self._path_results.get(self._path_key(path))
+
+    def has_inflight(self):
+        with self._lock:
+            return bool(self._pending or self._verifying or self._restoring)
 
     def register(self,file,backup,expected):
         check_backup_receipt(backup,getattr(file,'filename',None))
@@ -221,13 +242,15 @@ class SaveTracker:
                    'backup':dict(backup),'expected':{str(k):str(v) for k,v in expected.items()},
                    'started':time.monotonic()}
             self._pending[key]=entry
+            self._mark_path(file.filename, 'PENDING')
         return key
 
     def abort(self,file,key):
         with self._lock:
             if self._pending.get(key,{}).get('ref',lambda:None)() is file:
                 entry=self._pending.pop(key)
-                self._last.append({'state':'START_FAILED','backup':entry['backup']['backup']})
+                self._last.append({'state':'START_FAILED','backup':entry['backup']['backup'],'path':entry['path']})
+                self._mark_path(entry['path'], 'START_FAILED')
 
     def post_save(self,file):
         """Picard v3 callback: invoked ONLY after Picard reports file saved."""
@@ -239,9 +262,11 @@ class SaveTracker:
             path=str(getattr(file,'filename',''))
             if not path:
                 self._last.append({'state':'UNVERIFIED','reason':'missing_destination',
-                                   'backup':entry['backup']['backup']})
+                                   'backup':entry['backup']['backup'],'path':entry['path']})
+                self._mark_path(entry['path'], 'UNVERIFIED')
                 return True
-            self._last.append({'state':'VERIFYING','backup':entry['backup']['backup']})
+            self._last.append({'state':'VERIFYING','backup':entry['backup']['backup'],'path':path})
+            self._mark_path(path, 'VERIFYING')
             self._verifying+=1
         # No disk I/O or metadata traversal on the callback thread.
         try:
@@ -250,17 +275,40 @@ class SaveTracker:
             with self._lock:
                 self._verifying-=1
                 self._last.append({'state':'UNVERIFIED','reason':'verification_worker_stopped',
-                                   'backup':entry['backup']['backup']})
+                                   'backup':entry['backup']['backup'],'path':path})
+                self._mark_path(path, 'UNVERIFIED')
             return True
-        future.add_done_callback(lambda task,b=entry['backup']['backup']:self._completed(task,b))
+        future.add_done_callback(lambda task,b=entry['backup']['backup'],p=path:self._completed(task,b,p))
         return True
 
-    def _completed(self,future,backup):
+    def _completed(self,future,backup,path=None):
         try:result=future.result()
         except Exception as exc:result={'state':'UNVERIFIED','reason':type(exc).__name__}
         with self._lock:
             self._verifying-=1
-            self._last.append(dict(result,backup=backup))
+            self._last.append(dict(result,backup=backup,path=path))
+            if path:
+                self._mark_path(path, result.get('state', 'UNVERIFIED'))
+        # add_done_callback can execute synchronously if the future is already
+        # complete. ALWAYS schedule potentially slow cleanup off the GUI.
+        if result.get('state')=='VERIFIED' and self._on_verified is not None:
+            try:
+                self._pool.submit(self._cleanup_verified, path)
+            except RuntimeError:
+                with self._lock:self._last.append(
+                    {'state':'MP3_REVIEW','reason':'worker_stopped'})
+
+    def _cleanup_verified(self, path):
+        try:
+            cleanup=self._on_verified(path)
+            if cleanup and cleanup.get('action') in ('REMOVED','REVIEW'):
+                with self._lock:self._last.append(
+                    {'state':'MP3_'+cleanup['action'],
+                     'reason':cleanup.get('reason',''),
+                     'backup':cleanup.get('backup','')})
+        except Exception as exc:
+            with self._lock:self._last.append(
+                {'state':'MP3_REVIEW','reason':type(exc).__name__})
 
     def request_restore(self, manifest, new_destination):
         """Non-blocking request after explicit operator confirmation in UI."""
@@ -291,7 +339,8 @@ class SaveTracker:
             now=time.monotonic()
             for key,entry in list(self._pending.items()):
                 if now-entry['started']>self.save_timeout:
-                    self._last.append({'state':'UNKNOWN_TIMEOUT','backup':entry['backup']['backup']})
+                    self._last.append({'state':'UNKNOWN_TIMEOUT','backup':entry['backup']['backup'],'path':entry['path']})
+                    self._mark_path(entry['path'], 'UNKNOWN_TIMEOUT')
                     del self._pending[key]
             return {'pending':len(self._pending),
                     'verifying':self._verifying,
@@ -303,6 +352,7 @@ class SaveTracker:
             self._closed=True
             for entry in self._pending.values():
                 self._last.append({'state':'UNKNOWN_AFTER_DISABLE',
-                                   'backup':entry['backup']['backup']})
+                                   'backup':entry['backup']['backup'],'path':entry['path']})
+                self._mark_path(entry['path'], 'UNKNOWN_AFTER_DISABLE')
             self._pending.clear()
         self._pool.shutdown(wait=False,cancel_futures=False)

@@ -46,6 +46,8 @@ class PreSaveGateTests(unittest.TestCase):
         controller.save_tracker=None
         controller.api=types.SimpleNamespace(
             plugin_config={'auto_save_with_backup':True,'auto_apply_best':True},
+            global_config=types.SimpleNamespace(
+                setting={'rename_files':False,'move_files':False}),
             logger=types.SimpleNamespace(warning=lambda *args:None))
         controller.watches={identity:watch}
         controller.done=set()
@@ -65,6 +67,8 @@ class PreSaveGateTests(unittest.TestCase):
             io.backups['preflight:auto']={'value':True}
             controller._finish_backup()
             apply.assert_called_once()
+            self.assertEqual(apply.call_args.kwargs["native_settings"],
+                             {'rename_files':False,'move_files':False})
             self.assertIsNone(controller._backup_wait)
             self.assertIn(identity,controller.done)
 

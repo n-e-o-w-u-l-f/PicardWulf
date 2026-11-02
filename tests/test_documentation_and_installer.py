@@ -53,7 +53,7 @@ class DocumentationAndInstaller(unittest.TestCase):
         installer=(ROOT/'Install-NEOWULF.ps1').read_text(encoding='utf8')
         start=installer.index('$required = @(')
         end=installer.index(')',start)
-        required=set(re.findall(r"'([A-Za-z_]+\.py)'",installer[start:end]))
+        required=set(re.findall(r"'([A-Za-z_][A-Za-z_0-9]*\.py)'",installer[start:end]))
         modules={path.name for path in (ROOT/'neowulf_picard_repair').glob('*.py')}
         self.assertEqual(required,modules,
                          'Installer darf keine neuen Import-Module vergessen; '
