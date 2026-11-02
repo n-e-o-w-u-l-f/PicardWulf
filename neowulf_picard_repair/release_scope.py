@@ -23,7 +23,7 @@ _FRANK = re.compile(
     r"^(?:(?:frank\s+zander)\s*[-–:]\s*)?meine\s+coolsten\s+hits"
     r"(?:\s*[,\[(]?\s*(?:cd|disc|disk)\s*([1-2])\s*[\])]?\s*)?$",
     re.I)
-_AGGRO = re.compile(r"^aggro\s+ansage(?:\s+(?:nr\.?|nummer|no\.?)\s*([1-9]))?"
+_AGGRO = re.compile(r"^aggro\s+ansage(?:\s+(?:nr\.?|nummer|no\.?)\s*([1-9])x?)?"
                     r"(?:\s*[:\-].*)?$", re.I)
 _FRANK_EXCESS_DISC = re.compile(
     r"^(?:(?:frank\s+zander)\s*[-–:]\s*)?meine\s+coolsten\s+hits"
