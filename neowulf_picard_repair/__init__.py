@@ -91,6 +91,7 @@ class WweSeriesPlacementPreview(BaseAction):
         """Never changes tags, Picard profiles, or filesystem paths."""
         from .wwe_series import route_metadata
         from .album_routing import route_album
+        from .bmax_naming import classify_bmax
         files=list(objs or [])
         lines=[]
         for file in files[:20]:
@@ -109,12 +110,15 @@ class WweSeriesPlacementPreview(BaseAction):
             else:
                 snapshot['albumartists']=get('albumartists',())
             info=route_metadata(snapshot)
-            decision=route_album(snapshot)
-            if decision.folder:
-                lines.append(str(decision.folder).replace('/','\\'))
-                if decision.review:
+            # The real BMAX Preset3 uses category-specific music folder
+            # names. Preview that same deterministic function rather than
+            # the generic library layout (which omits VA_ROOT/artist fixes).
+            decision=classify_bmax(snapshot)
+            if decision.relative_folder:
+                lines.append(str(decision.relative_folder).replace('/','\\'))
+                if decision.requires_review:
                     lines.append('  Prüfhinweis: ' + decision.reason)
-            elif decision.review:
+            elif decision.requires_review:
                 lines.append('Ablage prüfen: ' + str(get('album',''))
                              + ' – ' + decision.reason
                              + ' (keine automatische Korrektur).')
