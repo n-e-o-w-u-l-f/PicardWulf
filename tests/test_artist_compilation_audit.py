@@ -43,7 +43,7 @@ class ArtistLibraryAuditTests(unittest.TestCase):
             self.assertFalse(item["automatic_move_allowed"])
             self.assertEqual({p:p.read_bytes() for p in saved},saved)
 
-    def test_aggro_va_review_not_misrepresented_as_die_sekte(self):
+    def test_aggro_user_local_archive_is_die_sekte_but_official_va_tags_preserved(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)
             file=root/"Aggro Ansage 1.flac"
@@ -53,9 +53,10 @@ class ArtistLibraryAuditTests(unittest.TestCase):
                 "date":"2002"})
             self.assertEqual(len(result["groups"]),1)
             item=result["groups"][0]
-            self.assertTrue(item["review"])
-            self.assertTrue(item["target"].startswith("REVIEW_ONLY:"))
-            self.assertNotIn("Die Sekte",item["target"])
+            self.assertFalse(item["review"])
+            self.assertEqual(item["target"],"Die Sekte/2002 - Aggro Ansage Nr. 1")
+            self.assertEqual(item["observed_albumartists"],["Various Artists"])
+            self.assertFalse(item["automatic_move_allowed"])
             self.assertEqual(file.read_bytes(),b"no mutation")
 
     def test_wwe_multidisc_groups_together_in_report(self):
