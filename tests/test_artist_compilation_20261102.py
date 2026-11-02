@@ -21,8 +21,8 @@ VA="![-1.2-VARiOUS-ARTiSTz-]!"
 
 
 class ArtistCompilations(unittest.TestCase):
-    def classify(self,album,artist="Various Artists",year="2022",**extra):
-        record=dict(album=album,albumartist=artist,artist="A single guest",
+    def classify(self,album,albumartist="Various Artists",year="2022",**extra):
+        record=dict(album=album,albumartist=albumartist,artist="A single guest",
                     originaldate=year,date=year,_secondaryreleasetype="compilation")
         record.update(extra)
         return preset.route_preset3(record)
