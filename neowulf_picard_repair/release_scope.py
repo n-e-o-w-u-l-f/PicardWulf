@@ -21,10 +21,14 @@ _SEKTE = {"die sekte", "alles ist die sekte", "a.i.d.s.", "a.i.d.s",
           "aids (alles ist die sekte)"}
 _FRANK = re.compile(
     r"^(?:(?:frank\s+zander)\s*[-–:]\s*)?meine\s+coolsten\s+hits"
-    r"(?:\s*[,\[(]?\s*(?:cd|disc|disk)\s*([1-3])\s*[\])]?\s*)?$",
+    r"(?:\s*[,\[(]?\s*(?:cd|disc|disk)\s*([1-2])\s*[\])]?\s*)?$",
     re.I)
 _AGGRO = re.compile(r"^aggro\s+ansage(?:\s+(?:nr\.?|nummer|no\.?)\s*([1-9]))?"
                     r"(?:\s*[:\-].*)?$", re.I)
+_FRANK_EXCESS_DISC = re.compile(
+    r"^(?:(?:frank\s+zander)\s*[-–:]\s*)?meine\s+coolsten\s+hits"
+    r"(?:\s*[,\[(]?\s*(?:cd|disc|disk)\s*([3-9])\s*[\])]?\s*)$", re.I)
+_AGGRO_ORIGINAL_YEARS = {1: "2002", 2: "2003", 3: "2003", 4: "2004", 5: "2005"}
 _WWE_ENTRANCE = re.compile(
     r"^(?:wwe|wwf)\s+(?:superstar\s+)?entrance\s+themes"
     r"(?:\s*[,\[(]?\s*(?:cd|disc|disk)\s*[1-9]\s*[\])]?\s*)?$", re.I)
@@ -62,14 +66,25 @@ def release_artist_scope(md: Mapping[str,object], year: str) -> Scope | None:
     else:
         credits = set()
 
+    if _FRANK_EXCESS_DISC.fullmatch(title):
+        return Scope("REVIEW", "", "frank_zander_2022_only_two_discs", True)
     if _FRANK.fullmatch(title):
-        # This is the actual Frank Zander 2022 2-CD compilation, not three
-        # multi-artist volumes. Guests and aliases on individual tracks are
-        # no reason to change its release-wide albumartist.
+        # Official 2022 edition is precisely TWO CDs (40 tracks). This local
+        # archive mapping is an ALBUM folder decision; guest track performers
+        # must never create extra compilation release directories.
         if year and year != "2022":
             return Scope("REVIEW","","frank_zander_edition_year_conflict",True)
+        disc = first(md.get("discnumber"))
+        total = first(md.get("totaldiscs") or md.get("disctotal"))
+        if ((disc and disc not in {"1","2","01","02"}) or
+                (total and total not in {"2","02"})):
+            return Scope("REVIEW","","frank_zander_disc_set_mismatch",True)
+        # Grouping is only allowed when disc values are internally coherent.
+        # The actual safe importer separately checks the complete pair.
+        coherent = total in {"2","02"} and disc in {"1","2","01","02"}
         return Scope("ARTIST","Frank Zander/2022 - Meine coolsten Hits",
-                     "user_confirmed_frank_zander_2022_2cd",coherent_discs=True)
+                     "verified_frank_zander_2022_2cd",
+                     coherent_discs=coherent)
 
     # Solo and group compilations remain with their confirmed album artist
     # even when _secondaryreleasetype includes 'compilation'.
@@ -93,11 +108,25 @@ def release_artist_scope(md: Mapping[str,object], year: str) -> Scope | None:
         return Scope("ARTIST",f"Die Sekte/{assigned_year} - {component(title)}",
                      "catalogue_named_die_sekte_album",coherent_discs=True)
 
-    if _AGGRO.fullmatch(title) and credit in _VA:
-        # MusicBrainz records Aggro Ansage Nr. 1 as Various Artists. Some
-        # sources credit 'Aggro Berlin präsentiert'. Album title alone is not
-        # evidence that all its performers belong to Die Sekte.
-        return Scope("REVIEW","","aggro_ansage_mixed_artist_credit_review",True)
+    match_aggro = _AGGRO.fullmatch(title)
+    if match_aggro and credit in _VA:
+        # Official catalogues describe these as Aggro Berlin / VA samplers.
+        # User explicitly wants this family under Die Sekte in their own
+        # BMAX archive; change ONLY the filename folder, never artist tags.
+        # Each numbered release remains its own distinct album directory.
+        n = match_aggro.group(1)
+        known = _AGGRO_ORIGINAL_YEARS.get(int(n)) if n else None
+        if year and known and year not in {known, "2006"}:
+            return Scope("REVIEW","","aggro_ansage_edition_year_conflict",True)
+        assigned = year or known
+        if not assigned:
+            return Scope("REVIEW","","aggro_ansage_year_needed",True)
+        label = component(title)
+        if not label:
+            return Scope("REVIEW","","aggro_ansage_title_unsafe",True)
+        return Scope("ARTIST",f"Die Sekte/{assigned} - {label}",
+                     "explicit_user_local_archive_override_not_artist_retag",
+                     coherent_discs=False)
 
     # WWE volume numbers already handled in wwe_series.py, not duplicated
     # here; Anthology and Entrance Themes are distinct, coherent albums.
